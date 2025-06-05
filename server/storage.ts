@@ -361,6 +361,187 @@ export class DatabaseStorage implements IStorage {
       totalScore: row.totalScore,
     }));
   }
+  
+  // Assignment operations
+  async getAssignments(): Promise<Assignment[]> {
+    return await db.select().from(assignments).orderBy(desc(assignments.createdAt));
+  }
+  
+  async getAssignment(id: number): Promise<Assignment | undefined> {
+    const [assignment] = await db.select().from(assignments).where(eq(assignments.id, id));
+    return assignment;
+  }
+  
+  async createAssignment(assignment: InsertAssignment): Promise<Assignment> {
+    const [newAssignment] = await db.insert(assignments).values(assignment).returning();
+    return newAssignment;
+  }
+  
+  async updateAssignment(id: number, assignment: Partial<InsertAssignment>): Promise<Assignment> {
+    const [updatedAssignment] = await db
+      .update(assignments)
+      .set({ ...assignment, updatedAt: new Date() })
+      .where(eq(assignments.id, id))
+      .returning();
+    return updatedAssignment;
+  }
+  
+  async deleteAssignment(id: number): Promise<void> {
+    await db.delete(assignments).where(eq(assignments.id, id));
+  }
+  
+  async getUserAssignments(userId: string): Promise<Assignment[]> {
+    return await db
+      .select()
+      .from(assignments)
+      .where(sql`${userId} = ANY(${assignments.assignedTo})`)
+      .orderBy(desc(assignments.createdAt));
+  }
+  
+  // Group operations
+  async getGroups(): Promise<Group[]> {
+    return await db.select().from(groups).orderBy(desc(groups.createdAt));
+  }
+  
+  async getGroup(id: number): Promise<Group | undefined> {
+    const [group] = await db.select().from(groups).where(eq(groups.id, id));
+    return group;
+  }
+  
+  async createGroup(group: InsertGroup): Promise<Group> {
+    const [newGroup] = await db.insert(groups).values(group).returning();
+    return newGroup;
+  }
+  
+  async updateGroup(id: number, group: Partial<InsertGroup>): Promise<Group> {
+    const [updatedGroup] = await db
+      .update(groups)
+      .set({ ...group, updatedAt: new Date() })
+      .where(eq(groups.id, id))
+      .returning();
+    return updatedGroup;
+  }
+  
+  async deleteGroup(id: number): Promise<void> {
+    await db.delete(groups).where(eq(groups.id, id));
+  }
+  
+  async getUserGroups(userId: string): Promise<Group[]> {
+    return await db
+      .select()
+      .from(groups)
+      .where(sql`${userId} = ANY(${groups.members}) OR ${userId} = ANY(${groups.instructors})`)
+      .orderBy(desc(groups.createdAt));
+  }
+  
+  // Contest participant operations
+  async getContestParticipants(contestId: number): Promise<ContestParticipant[]> {
+    return await db
+      .select()
+      .from(contestParticipants)
+      .where(eq(contestParticipants.contestId, contestId))
+      .orderBy(asc(contestParticipants.rank));
+  }
+  
+  async registerForContest(data: InsertContestParticipant): Promise<ContestParticipant> {
+    const [participant] = await db.insert(contestParticipants).values(data).returning();
+    return participant;
+  }
+  
+  async updateContestParticipant(contestId: number, userId: string, data: Partial<InsertContestParticipant>): Promise<ContestParticipant> {
+    const [updated] = await db
+      .update(contestParticipants)
+      .set(data)
+      .where(and(eq(contestParticipants.contestId, contestId), eq(contestParticipants.userId, userId)))
+      .returning();
+    return updated;
+  }
+  
+  // Announcement operations
+  async getAnnouncements(): Promise<Announcement[]> {
+    return await db.select().from(announcements).where(eq(announcements.isVisible, true)).orderBy(desc(announcements.createdAt));
+  }
+  
+  async getAnnouncement(id: number): Promise<Announcement | undefined> {
+    const [announcement] = await db.select().from(announcements).where(eq(announcements.id, id));
+    return announcement;
+  }
+  
+  async createAnnouncement(announcement: InsertAnnouncement): Promise<Announcement> {
+    const [newAnnouncement] = await db.insert(announcements).values(announcement).returning();
+    return newAnnouncement;
+  }
+  
+  async updateAnnouncement(id: number, announcement: Partial<InsertAnnouncement>): Promise<Announcement> {
+    const [updatedAnnouncement] = await db
+      .update(announcements)
+      .set({ ...announcement, updatedAt: new Date() })
+      .where(eq(announcements.id, id))
+      .returning();
+    return updatedAnnouncement;
+  }
+  
+  async deleteAnnouncement(id: number): Promise<void> {
+    await db.delete(announcements).where(eq(announcements.id, id));
+  }
+  
+  async getUserAnnouncements(userId: string): Promise<Announcement[]> {
+    return await db
+      .select()
+      .from(announcements)
+      .where(and(
+        eq(announcements.isVisible, true),
+        sql`'all' = ANY(${announcements.targetAudience}) OR ${userId} = ANY(${announcements.targetAudience})`
+      ))
+      .orderBy(desc(announcements.createdAt));
+  }
+  
+  // Admin analytics operations
+  async getAdminAnalytics(): Promise<{
+    totalUsers: number;
+    totalProblems: number;
+    totalSubmissions: number;
+    activeContests: number;
+    recentActivity: any[];
+  }> {
+    const [userCount] = await db.select({ count: sql<number>`count(*)` }).from(users);
+    const [problemCount] = await db.select({ count: sql<number>`count(*)` }).from(problems);
+    const [submissionCount] = await db.select({ count: sql<number>`count(*)` }).from(submissions);
+    const [activeContestCount] = await db
+      .select({ count: sql<number>`count(*)` })
+      .from(contests)
+      .where(and(
+        sql`${contests.startTime} <= NOW()`,
+        sql`${contests.endTime} >= NOW()`
+      ));
+    
+    const recentSubmissions = await db
+      .select()
+      .from(submissions)
+      .orderBy(desc(submissions.submittedAt))
+      .limit(10);
+    
+    return {
+      totalUsers: userCount.count,
+      totalProblems: problemCount.count,
+      totalSubmissions: submissionCount.count,
+      activeContests: activeContestCount.count,
+      recentActivity: recentSubmissions,
+    };
+  }
+  
+  async getAllUsers(): Promise<User[]> {
+    return await db.select().from(users).orderBy(desc(users.createdAt));
+  }
+  
+  async updateUserRole(userId: string, role: string): Promise<User> {
+    const [updatedUser] = await db
+      .update(users)
+      .set({ role, updatedAt: new Date() })
+      .where(eq(users.id, userId))
+      .returning();
+    return updatedUser;
+  }
 }
 
 export const storage = new DatabaseStorage();

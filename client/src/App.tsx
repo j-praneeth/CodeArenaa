@@ -10,6 +10,11 @@ import Landing from "@/pages/landing";
 import Dashboard from "@/pages/dashboard";
 import Problems from "@/pages/problems";
 import Contests from "@/pages/contests";
+import Leaderboard from "@/pages/leaderboard";
+import ProblemDetail from "@/pages/problem-detail";
+import AdminDashboard from "@/pages/admin-dashboard";
+import Profile from "@/pages/profile";
+import Settings from "@/pages/settings";
 
 function Router() {
   const { isAuthenticated, isLoading } = useAuth();
@@ -22,10 +27,14 @@ function Router() {
         <>
           <Route path="/" component={Dashboard} />
           <Route path="/problems" component={Problems} />
+          <Route path="/problems/:id" component={ProblemDetail} />
           <Route path="/contests" component={Contests} />
           <Route path="/courses" component={Dashboard} />
-          <Route path="/leaderboard" component={Dashboard} />
+          <Route path="/leaderboard" component={Leaderboard} />
           <Route path="/assignments" component={Dashboard} />
+          <Route path="/admin" component={AdminDashboard} />
+          <Route path="/profile" component={Profile} />
+          <Route path="/settings" component={Settings} />
         </>
       )}
       <Route component={NotFound} />
