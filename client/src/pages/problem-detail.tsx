@@ -3,12 +3,12 @@ import { useParams } from "wouter";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
-import Navbar from "@/components/layout/navbar";
+import { Layout } from "@/components/Layout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import CodeEditor from "@/components/code-editor";
+import { CodeEditor } from "@/components/CodeEditor";
 import { Play, Send, CheckCircle, XCircle, Clock } from "lucide-react";
 
 export default function ProblemDetail() {
