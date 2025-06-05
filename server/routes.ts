@@ -118,7 +118,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // User stats route
   app.get('/api/users/:id/stats', isAuthenticated, async (req: any, res) => {
     try {
-      const userId = req.params.id;
+      const userId = req.params.id === 'me' ? req.user.claims.sub : req.params.id;
       const currentUserId = req.user.claims.sub;
       
       // Users can only view their own stats unless they're admin

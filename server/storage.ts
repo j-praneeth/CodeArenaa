@@ -5,6 +5,10 @@ import {
   contests,
   courses,
   userProgress,
+  assignments,
+  groups,
+  contestParticipants,
+  announcements,
   type User,
   type UpsertUser,
   type Problem,
@@ -17,6 +21,14 @@ import {
   type InsertCourse,
   type UserProgress,
   type InsertUserProgress,
+  type Assignment,
+  type InsertAssignment,
+  type Group,
+  type InsertGroup,
+  type ContestParticipant,
+  type InsertContestParticipant,
+  type Announcement,
+  type InsertAnnouncement,
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, desc, asc, and, sql, inArray } from "drizzle-orm";
@@ -68,6 +80,46 @@ export interface IStorage {
     problemsSolved: number;
     totalScore: number;
   }>>;
+  
+  // Assignment operations
+  getAssignments(): Promise<Assignment[]>;
+  getAssignment(id: number): Promise<Assignment | undefined>;
+  createAssignment(assignment: InsertAssignment): Promise<Assignment>;
+  updateAssignment(id: number, assignment: Partial<InsertAssignment>): Promise<Assignment>;
+  deleteAssignment(id: number): Promise<void>;
+  getUserAssignments(userId: string): Promise<Assignment[]>;
+  
+  // Group operations
+  getGroups(): Promise<Group[]>;
+  getGroup(id: number): Promise<Group | undefined>;
+  createGroup(group: InsertGroup): Promise<Group>;
+  updateGroup(id: number, group: Partial<InsertGroup>): Promise<Group>;
+  deleteGroup(id: number): Promise<void>;
+  getUserGroups(userId: string): Promise<Group[]>;
+  
+  // Contest participant operations
+  getContestParticipants(contestId: number): Promise<ContestParticipant[]>;
+  registerForContest(data: InsertContestParticipant): Promise<ContestParticipant>;
+  updateContestParticipant(contestId: number, userId: string, data: Partial<InsertContestParticipant>): Promise<ContestParticipant>;
+  
+  // Announcement operations
+  getAnnouncements(): Promise<Announcement[]>;
+  getAnnouncement(id: number): Promise<Announcement | undefined>;
+  createAnnouncement(announcement: InsertAnnouncement): Promise<Announcement>;
+  updateAnnouncement(id: number, announcement: Partial<InsertAnnouncement>): Promise<Announcement>;
+  deleteAnnouncement(id: number): Promise<void>;
+  getUserAnnouncements(userId: string): Promise<Announcement[]>;
+  
+  // Admin analytics operations
+  getAdminAnalytics(): Promise<{
+    totalUsers: number;
+    totalProblems: number;
+    totalSubmissions: number;
+    activeContests: number;
+    recentActivity: any[];
+  }>;
+  getAllUsers(): Promise<User[]>;
+  updateUserRole(userId: string, role: string): Promise<User>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -122,17 +174,17 @@ export class DatabaseStorage implements IStorage {
   
   // Submission operations
   async getSubmissions(userId?: string, problemId?: number): Promise<Submission[]> {
-    let query = db.select().from(submissions);
+    let baseQuery = db.select().from(submissions);
     
     if (userId && problemId) {
-      query = query.where(and(eq(submissions.userId, userId), eq(submissions.problemId, problemId)));
+      return await baseQuery.where(and(eq(submissions.userId, userId), eq(submissions.problemId, problemId))).orderBy(desc(submissions.submittedAt));
     } else if (userId) {
-      query = query.where(eq(submissions.userId, userId));
+      return await baseQuery.where(eq(submissions.userId, userId)).orderBy(desc(submissions.submittedAt));
     } else if (problemId) {
-      query = query.where(eq(submissions.problemId, problemId));
+      return await baseQuery.where(eq(submissions.problemId, problemId)).orderBy(desc(submissions.submittedAt));
     }
     
-    return await query.orderBy(desc(submissions.submittedAt));
+    return await baseQuery.orderBy(desc(submissions.submittedAt));
   }
   
   async getSubmission(id: number): Promise<Submission | undefined> {
@@ -148,7 +200,7 @@ export class DatabaseStorage implements IStorage {
       userId: submission.userId,
       problemId: submission.problemId,
       status: submission.status === 'accepted' ? 'solved' : 'in_progress',
-      bestScore: submission.score ? parseFloat(submission.score) : undefined,
+      bestScore: submission.score ? submission.score : undefined,
       attempts: 1,
       lastAttempt: new Date(),
       solvedAt: submission.status === 'accepted' ? new Date() : undefined,

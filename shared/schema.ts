@@ -109,13 +109,69 @@ export const userProgress = pgTable("user_progress", {
   solvedAt: timestamp("solved_at"),
 });
 
+export const assignments = pgTable("assignments", {
+  id: serial("id").primaryKey(),
+  title: text("title").notNull(),
+  description: text("description"),
+  problems: integer("problems").array(), // Array of problem IDs
+  assignedTo: text("assigned_to").array(), // Array of user IDs or group IDs
+  assignmentType: varchar("assignment_type").notNull(), // individual, group, course
+  dueDate: timestamp("due_date"),
+  maxAttempts: integer("max_attempts").default(3),
+  isVisible: boolean("is_visible").default(true),
+  autoGrade: boolean("auto_grade").default(true),
+  createdBy: varchar("created_by").references(() => users.id),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const groups = pgTable("groups", {
+  id: serial("id").primaryKey(),
+  name: text("name").notNull(),
+  description: text("description"),
+  members: text("members").array(), // Array of user IDs
+  instructors: text("instructors").array(), // Array of user IDs
+  courseId: integer("course_id").references(() => courses.id),
+  createdBy: varchar("created_by").references(() => users.id),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const contestParticipants = pgTable("contest_participants", {
+  id: serial("id").primaryKey(),
+  contestId: integer("contest_id").references(() => contests.id).notNull(),
+  userId: varchar("user_id").references(() => users.id).notNull(),
+  registeredAt: timestamp("registered_at").defaultNow(),
+  score: decimal("score", { precision: 10, scale: 2 }).default("0"),
+  rank: integer("rank"),
+  submissions: integer("submissions").default(0),
+  lastSubmission: timestamp("last_submission"),
+});
+
+export const announcements = pgTable("announcements", {
+  id: serial("id").primaryKey(),
+  title: text("title").notNull(),
+  content: text("content").notNull(),
+  type: varchar("type").notNull(), // global, course, contest, assignment
+  targetAudience: text("target_audience").array(), // Array of user IDs, group IDs, or "all"
+  isVisible: boolean("is_visible").default(true),
+  priority: varchar("priority").default("normal"), // low, normal, high, urgent
+  createdBy: varchar("created_by").references(() => users.id),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
 // Relations
 export const usersRelations = relations(users, ({ many }) => ({
   submissions: many(submissions),
   createdProblems: many(problems),
   createdContests: many(contests),
   createdCourses: many(courses),
+  createdAssignments: many(assignments),
+  createdGroups: many(groups),
+  createdAnnouncements: many(announcements),
   progress: many(userProgress),
+  contestParticipations: many(contestParticipants),
 }));
 
 export const problemsRelations = relations(problems, ({ one, many }) => ({
@@ -138,18 +194,20 @@ export const submissionsRelations = relations(submissions, ({ one }) => ({
   }),
 }));
 
-export const contestsRelations = relations(contests, ({ one }) => ({
+export const contestsRelations = relations(contests, ({ one, many }) => ({
   creator: one(users, {
     fields: [contests.createdBy],
     references: [users.id],
   }),
+  participants: many(contestParticipants),
 }));
 
-export const coursesRelations = relations(courses, ({ one }) => ({
+export const coursesRelations = relations(courses, ({ one, many }) => ({
   creator: one(users, {
     fields: [courses.createdBy],
     references: [users.id],
   }),
+  groups: many(groups),
 }));
 
 export const userProgressRelations = relations(userProgress, ({ one }) => ({
@@ -160,6 +218,42 @@ export const userProgressRelations = relations(userProgress, ({ one }) => ({
   problem: one(problems, {
     fields: [userProgress.problemId],
     references: [problems.id],
+  }),
+}));
+
+export const assignmentsRelations = relations(assignments, ({ one }) => ({
+  creator: one(users, {
+    fields: [assignments.createdBy],
+    references: [users.id],
+  }),
+}));
+
+export const groupsRelations = relations(groups, ({ one }) => ({
+  creator: one(users, {
+    fields: [groups.createdBy],
+    references: [users.id],
+  }),
+  course: one(courses, {
+    fields: [groups.courseId],
+    references: [courses.id],
+  }),
+}));
+
+export const contestParticipantsRelations = relations(contestParticipants, ({ one }) => ({
+  contest: one(contests, {
+    fields: [contestParticipants.contestId],
+    references: [contests.id],
+  }),
+  user: one(users, {
+    fields: [contestParticipants.userId],
+    references: [users.id],
+  }),
+}));
+
+export const announcementsRelations = relations(announcements, ({ one }) => ({
+  creator: one(users, {
+    fields: [announcements.createdBy],
+    references: [users.id],
   }),
 }));
 
@@ -196,6 +290,29 @@ export const insertUserProgressSchema = createInsertSchema(userProgress).omit({
   id: true,
 });
 
+export const insertAssignmentSchema = createInsertSchema(assignments).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export const insertGroupSchema = createInsertSchema(groups).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export const insertContestParticipantSchema = createInsertSchema(contestParticipants).omit({
+  id: true,
+  registeredAt: true,
+});
+
+export const insertAnnouncementSchema = createInsertSchema(announcements).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
 // Types
 export type UpsertUser = typeof users.$inferInsert;
 export type User = typeof users.$inferSelect;
@@ -209,3 +326,11 @@ export type InsertCourse = z.infer<typeof insertCourseSchema>;
 export type Course = typeof courses.$inferSelect;
 export type InsertUserProgress = z.infer<typeof insertUserProgressSchema>;
 export type UserProgress = typeof userProgress.$inferSelect;
+export type InsertAssignment = z.infer<typeof insertAssignmentSchema>;
+export type Assignment = typeof assignments.$inferSelect;
+export type InsertGroup = z.infer<typeof insertGroupSchema>;
+export type Group = typeof groups.$inferSelect;
+export type InsertContestParticipant = z.infer<typeof insertContestParticipantSchema>;
+export type ContestParticipant = typeof contestParticipants.$inferSelect;
+export type InsertAnnouncement = z.infer<typeof insertAnnouncementSchema>;
+export type Announcement = typeof announcements.$inferSelect;
