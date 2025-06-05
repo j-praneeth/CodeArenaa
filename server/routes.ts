@@ -12,7 +12,6 @@ import {
   insertAnnouncementSchema 
 } from "@shared/schema";
 import { z } from "zod";
-import { MongoStorage } from "./mongoStorage";
 
 export async function registerRoutes(app: Express): Promise<Server> {
   // Auth middleware
@@ -59,7 +58,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const userId = req.user.claims.sub;
       const user = await storage.getUser(userId);
-
+      
       if (user?.role !== 'admin') {
         return res.status(403).json({ message: "Only admins can create problems" });
       }
@@ -68,7 +67,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         ...req.body,
         createdBy: userId,
       });
-
+      
       const problem = await storage.createProblem(validatedData);
       res.status(201).json(problem);
     } catch (error) {
@@ -85,7 +84,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const userId = req.user.claims.sub;
       const problemId = req.query.problemId ? parseInt(req.query.problemId as string) : undefined;
-
+      
       const submissions = await storage.getSubmissions(userId, problemId);
       res.json(submissions);
     } catch (error) {
@@ -97,7 +96,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post('/api/submissions', isAuthenticated, async (req: any, res) => {
     try {
       const userId = req.user.claims.sub;
-
+      
       const validatedData = insertSubmissionSchema.parse({
         ...req.body,
         userId,
@@ -112,7 +111,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       validatedData.memory = mockResult.memory;
       validatedData.score = mockResult.score;
       validatedData.feedback = mockResult.feedback;
-
+      
       const submission = await storage.createSubmission(validatedData);
       res.status(201).json(submission);
     } catch (error) {
@@ -129,16 +128,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const userId = req.params.id === 'me' ? req.user.claims.sub : req.params.id;
       const currentUserId = req.user.claims.sub;
-
+      
       // Users can only view their own stats unless they're admin
       const currentUser = await storage.getUser(currentUserId);
       if (userId !== currentUserId && currentUser?.role !== 'admin') {
         return res.status(403).json({ message: "Unauthorized" });
       }
-
+      
       const stats = await storage.getUserSubmissionStats(userId);
       const progress = await storage.getUserProgress(userId);
-
+      
       res.json({ ...stats, progress });
     } catch (error) {
       console.error("Error fetching user stats:", error);
@@ -175,7 +174,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const userId = req.user.claims.sub;
       const user = await storage.getUser(userId);
-
+      
       if (user?.role !== 'admin') {
         return res.status(403).json({ message: "Only admins can create contests" });
       }
@@ -184,7 +183,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         ...req.body,
         createdBy: userId,
       });
-
+      
       const contest = await storage.createContest(validatedData);
       res.status(201).json(contest);
     } catch (error) {
@@ -225,7 +224,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const userId = req.user.claims.sub;
       const user = await storage.getUser(userId);
-
+      
       if (user?.role !== 'admin') {
         return res.status(403).json({ message: "Only admins can create courses" });
       }
@@ -234,7 +233,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         ...req.body,
         createdBy: userId,
       });
-
+      
       const course = await storage.createCourse(validatedData);
       res.status(201).json(course);
     } catch (error) {
@@ -288,7 +287,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const userId = req.user.claims.sub;
       const user = await storage.getUser(userId);
-
+      
       if (user?.role !== 'admin') {
         return res.status(403).json({ message: "Only admins can create assignments" });
       }
@@ -297,7 +296,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         ...req.body,
         createdBy: userId,
       });
-
+      
       const assignment = await storage.createAssignment(validatedData);
       res.status(201).json(assignment);
     } catch (error) {
@@ -325,7 +324,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const userId = req.user.claims.sub;
       const user = await storage.getUser(userId);
-
+      
       if (user?.role !== 'admin') {
         return res.status(403).json({ message: "Only admins can create groups" });
       }
@@ -334,7 +333,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         ...req.body,
         createdBy: userId,
       });
-
+      
       const group = await storage.createGroup(validatedData);
       res.status(201).json(group);
     } catch (error) {
@@ -362,7 +361,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const userId = req.user.claims.sub;
       const user = await storage.getUser(userId);
-
+      
       if (user?.role !== 'admin') {
         return res.status(403).json({ message: "Only admins can create announcements" });
       }
@@ -371,7 +370,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         ...req.body,
         createdBy: userId,
       });
-
+      
       const announcement = await storage.createAnnouncement(validatedData);
       res.status(201).json(announcement);
     } catch (error) {
@@ -388,12 +387,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const contestId = parseInt(req.params.id);
       const userId = req.user.claims.sub;
-
+      
       const participant = await storage.registerForContest({
         contestId,
         userId,
       });
-
+      
       res.status(201).json(participant);
     } catch (error) {
       console.error("Error registering for contest:", error);
@@ -417,11 +416,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const userId = req.user.claims.sub;
       const user = await storage.getUser(userId);
-
+      
       if (user?.role !== 'admin') {
         return res.status(403).json({ message: "Admin access required" });
       }
-
+      
       const analytics = await storage.getAdminAnalytics();
       res.json(analytics);
     } catch (error) {
@@ -434,11 +433,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const userId = req.user.claims.sub;
       const user = await storage.getUser(userId);
-
+      
       if (user?.role !== 'admin') {
         return res.status(403).json({ message: "Admin access required" });
       }
-
+      
       const users = await storage.getAllUsers();
       res.json(users);
     } catch (error) {
@@ -451,18 +450,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const currentUserId = req.user.claims.sub;
       const currentUser = await storage.getUser(currentUserId);
-
+      
       if (currentUser?.role !== 'admin') {
         return res.status(403).json({ message: "Admin access required" });
       }
-
+      
       const targetUserId = req.params.id;
       const { role } = req.body;
-
+      
       if (!['student', 'admin'].includes(role)) {
         return res.status(400).json({ message: "Invalid role" });
       }
-
+      
       const updatedUser = await storage.updateUserRole(targetUserId, role);
       res.json(updatedUser);
     } catch (error) {
@@ -475,11 +474,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const userId = req.user.claims.sub;
       const user = await storage.getUser(userId);
-
+      
       if (user?.role !== 'admin') {
         return res.status(403).json({ message: "Admin access required" });
       }
-
+      
       const assignments = await storage.getAssignments();
       res.json(assignments);
     } catch (error) {
@@ -492,11 +491,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const userId = req.user.claims.sub;
       const user = await storage.getUser(userId);
-
+      
       if (user?.role !== 'admin') {
         return res.status(403).json({ message: "Admin access required" });
       }
-
+      
       const groups = await storage.getGroups();
       res.json(groups);
     } catch (error) {
@@ -509,66 +508,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const userId = req.user.claims.sub;
       const user = await storage.getUser(userId);
-
+      
       if (user?.role !== 'admin') {
         return res.status(403).json({ message: "Admin access required" });
       }
-
+      
       const announcements = await storage.getAnnouncements();
       res.json(announcements);
     } catch (error) {
       console.error("Error fetching all announcements:", error);
       res.status(500).json({ message: "Failed to fetch announcements" });
-    }
-  });
-
-  // MongoDB API routes
-  app.get("/api/mongo/contests", async (req, res) => {
-    try {
-      const { status } = req.query;
-      const contests = await MongoStorage.getContests(status as string);
-      res.json(contests);
-    } catch (error) {
-      res.status(500).json({ message: "Failed to fetch contests", error: error.message });
-    }
-  });
-
-  app.post("/api/mongo/contests", async (req, res) => {
-    try {
-      const contest = await MongoStorage.createContest(req.body);
-      res.status(201).json(contest);
-    } catch (error) {
-      res.status(500).json({ message: "Failed to create contest", error: error.message });
-    }
-  });
-
-  app.get("/api/mongo/problems", async (req, res) => {
-    try {
-      const problems = await MongoStorage.getProblems();
-      res.json(problems);
-    } catch (error) {
-      res.status(500).json({ message: "Failed to fetch problems", error: error.message });
-    }
-  });
-
-  app.post("/api/mongo/problems", async (req, res) => {
-    try {
-      const problem = await MongoStorage.createProblem(req.body);
-      res.status(201).json(problem);
-    } catch (error) {
-      res.status(500).json({ message: "Failed to create problem", error: error.message });
-    }
-  });
-
-  app.get("/api/mongo/problems/:id", async (req, res) => {
-    try {
-      const problem = await MongoStorage.getProblemById(req.params.id);
-      if (!problem) {
-        return res.status(404).json({ message: "Problem not found" });
-      }
-      res.json(problem);
-    } catch (error) {
-      res.status(500).json({ message: "Failed to fetch problem", error: error.message });
     }
   });
 
@@ -582,7 +531,7 @@ function mockExecuteCode(code: string, language: string) {
   const isCorrect = Math.random() > 0.3; // 70% success rate
   const runtime = Math.floor(Math.random() * 1000) + 50; // 50-1050ms
   const memory = Math.floor(Math.random() * 100) + 20; // 20-120MB
-
+  
   if (isCorrect) {
     return {
       status: 'accepted' as const,
@@ -595,13 +544,13 @@ function mockExecuteCode(code: string, language: string) {
     const errorTypes = ['wrong_answer', 'time_limit_exceeded', 'runtime_error'];
     const status = errorTypes[Math.floor(Math.random() * errorTypes.length)] as any;
     const score = status === 'wrong_answer' ? (Math.floor(Math.random() * 80) + 10).toString() + ".00" : "0.00";
-
+    
     const feedbacks = {
       wrong_answer: "Wrong answer on test case 2",
       time_limit_exceeded: "Time limit exceeded",
       runtime_error: "Runtime error: division by zero",
     };
-
+    
     return {
       status,
       runtime: status === 'time_limit_exceeded' ? 1000 : runtime,
