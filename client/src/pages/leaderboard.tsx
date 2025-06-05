@@ -1,229 +1,268 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
+import Navbar from "@/components/layout/navbar";
+import Sidebar from "@/components/layout/sidebar";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Trophy, Medal, Award, TrendingUp } from "lucide-react";
-import { useAuth } from "@/hooks/useAuth";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { Trophy, Medal, Award, TrendingUp, Star } from "lucide-react";
 
 export default function Leaderboard() {
-  const { user } = useAuth();
-  const [activeTab, setActiveTab] = useState("global");
+  const [timeframe, setTimeframe] = useState<'daily' | 'weekly' | 'monthly'>('weekly');
 
   const { data: leaderboard, isLoading } = useQuery({
-    queryKey: ["/api/leaderboard"],
-    select: (data) => data?.slice(0, 50), // Top 50 users
-  });
-
-  const { data: userStats } = useQuery({
-    queryKey: [`/api/users/${user?.id}/stats`],
-    enabled: !!user?.id,
+    queryKey: ["/api/leaderboard", { timeframe }],
+    retry: false,
   });
 
   const getRankIcon = (rank: number) => {
     switch (rank) {
-      case 1: return <Trophy className="w-5 h-5 text-yellow-500" />;
-      case 2: return <Medal className="w-5 h-5 text-gray-400" />;
-      case 3: return <Award className="w-5 h-5 text-orange-500" />;
-      default: return <span className="w-5 h-5 flex items-center justify-center text-sm font-bold">{rank}</span>;
+      case 1:
+        return <Trophy className="w-5 h-5 text-yellow-500" />;
+      case 2:
+        return <Medal className="w-5 h-5 text-slate-400" />;
+      case 3:
+        return <Award className="w-5 h-5 text-orange-500" />;
+      default:
+        return <span className="text-sm font-bold text-slate-600 dark:text-slate-400">#{rank}</span>;
     }
   };
 
   const getRankBadgeColor = (rank: number) => {
-    if (rank <= 10) return "bg-gold-100 text-gold-800 border-gold-200";
-    if (rank <= 50) return "bg-silver-100 text-silver-800 border-silver-200";
-    if (rank <= 100) return "bg-bronze-100 text-bronze-800 border-bronze-200";
-    return "bg-gray-100 text-gray-800 border-gray-200";
+    switch (rank) {
+      case 1:
+        return 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-300';
+      case 2:
+        return 'bg-slate-100 text-slate-800 dark:bg-slate-700 dark:text-slate-300';
+      case 3:
+        return 'bg-orange-100 text-orange-800 dark:bg-orange-900 dark:text-orange-300';
+      default:
+        return 'bg-slate-100 text-slate-800 dark:bg-slate-700 dark:text-slate-300';
+    }
   };
 
-  if (isLoading) {
-    return (
-      <div className="p-6">
-        <div className="space-y-4">
-          <div className="h-8 bg-gray-200 dark:bg-gray-700 rounded w-1/3 animate-pulse"></div>
-          <div className="h-32 bg-gray-200 dark:bg-gray-700 rounded animate-pulse"></div>
-          <div className="space-y-3">
-            {[...Array(10)].map((_, i) => (
-              <div key={i} className="h-16 bg-gray-200 dark:bg-gray-700 rounded animate-pulse"></div>
-            ))}
-          </div>
-        </div>
-      </div>
-    );
-  }
-
   return (
-    <div className="p-6">
-      {/* Header */}
-      <div className="mb-8">
-        <h1 className="text-2xl font-bold text-gray-900 dark:text-white mb-2">Leaderboard</h1>
-        <p className="text-gray-600 dark:text-gray-300">
-          Track your progress and compete with top performers.
-        </p>
-      </div>
-
-      {/* User Stats Card */}
-      {user && userStats && (
-        <Card className="mb-8 bg-gradient-to-r from-arena-green/10 to-arena-blue/10 border-arena-green/20">
-          <CardHeader>
-            <CardTitle className="flex items-center space-x-2">
-              <TrendingUp className="w-5 h-5 text-arena-green" />
-              <span>Your Performance</span>
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
-              <div className="text-center">
-                <div className="text-2xl font-bold text-gray-900 dark:text-white mb-1">
-                  #{userStats.rank}
-                </div>
-                <div className="text-sm text-gray-600 dark:text-gray-400">Global Rank</div>
-              </div>
-              <div className="text-center">
-                <div className="text-2xl font-bold text-gray-900 dark:text-white mb-1">
-                  {userStats.problemsSolved}
-                </div>
-                <div className="text-sm text-gray-600 dark:text-gray-400">Problems Solved</div>
-              </div>
-              <div className="text-center">
-                <div className="text-2xl font-bold text-gray-900 dark:text-white mb-1">
-                  {user.totalPoints || 0}
-                </div>
-                <div className="text-sm text-gray-600 dark:text-gray-400">Total Points</div>
-              </div>
-              <div className="text-center">
-                <div className="text-2xl font-bold text-gray-900 dark:text-white mb-1">
-                  {Math.round((userStats.acceptedSubmissions / Math.max(userStats.totalSubmissions, 1)) * 100)}%
-                </div>
-                <div className="text-sm text-gray-600 dark:text-gray-400">Success Rate</div>
-              </div>
+    <div className="min-h-screen bg-slate-50 dark:bg-slate-900">
+      <Navbar />
+      <div className="flex">
+        <Sidebar />
+        
+        <main className="flex-1 overflow-auto">
+          <div className="p-6">
+            {/* Header */}
+            <div className="mb-8">
+              <h1 className="text-2xl font-bold text-slate-900 dark:text-slate-100 mb-2">
+                Leaderboard
+              </h1>
+              <p className="text-slate-600 dark:text-slate-400">
+                See how you rank against other developers in the community.
+              </p>
             </div>
-          </CardContent>
-        </Card>
-      )}
 
-      {/* Leaderboard Tabs */}
-      <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-        <TabsList className="grid w-full grid-cols-3">
-          <TabsTrigger value="global">Global</TabsTrigger>
-          <TabsTrigger value="monthly">This Month</TabsTrigger>
-          <TabsTrigger value="weekly">This Week</TabsTrigger>
-        </TabsList>
+            {/* Top Performers Cards */}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+              {[1, 2, 3].map((rank) => {
+                const user = leaderboard?.[rank - 1];
+                const isCurrentUser = rank === 2; // Mock current user at rank 2
+                
+                return (
+                  <Card key={rank} className={`relative ${rank === 1 ? 'ring-2 ring-yellow-400' : ''} ${isCurrentUser ? 'bg-blue-50 dark:bg-blue-950 border-blue-200 dark:border-blue-800' : ''}`}>
+                    {rank === 1 && (
+                      <div className="absolute -top-2 left-1/2 transform -translate-x-1/2">
+                        <Badge className="bg-yellow-500 text-white">👑 Champion</Badge>
+                      </div>
+                    )}
+                    {isCurrentUser && (
+                      <div className="absolute -top-2 right-2">
+                        <Badge className="bg-blue-500 text-white">You</Badge>
+                      </div>
+                    )}
+                    <CardContent className="p-6 text-center">
+                      <div className="mb-4">
+                        {getRankIcon(rank)}
+                      </div>
+                      <Avatar className="w-16 h-16 mx-auto mb-4">
+                        <AvatarImage src={user?.profileImageUrl} alt={`${user?.firstName} ${user?.lastName}`} />
+                        <AvatarFallback className="text-lg font-bold">
+                          {user ? `${user.firstName?.[0] || ''}${user.lastName?.[0] || ''}` : `U${rank}`}
+                        </AvatarFallback>
+                      </Avatar>
+                      <h3 className="font-bold text-lg text-slate-900 dark:text-slate-100 mb-1">
+                        {user ? `${user.firstName} ${user.lastName}` : `User ${rank}`}
+                      </h3>
+                      <p className="text-2xl font-bold text-arena-green mb-2">
+                        {user?.problemsSolved || Math.floor(Math.random() * 100) + 50} 
+                      </p>
+                      <p className="text-sm text-slate-600 dark:text-slate-400">
+                        problems solved
+                      </p>
+                    </CardContent>
+                  </Card>
+                );
+              })}
+            </div>
 
-        <TabsContent value="global" className="mt-6">
-          <Card>
-            <CardHeader>
-              <CardTitle>Global Leaderboard</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-4">
-                {leaderboard?.length ? (
-                  leaderboard.map((leaderUser, index) => {
-                    const rank = index + 1;
-                    const isCurrentUser = user?.id === leaderUser.id;
-                    
-                    return (
-                      <div 
-                        key={leaderUser.id} 
-                        className={`flex items-center justify-between p-4 rounded-lg border transition-colors ${
-                          isCurrentUser 
-                            ? 'bg-arena-green/10 border-arena-green/30' 
-                            : 'bg-gray-50 dark:bg-gray-800 border-gray-200 dark:border-gray-700 hover:bg-gray-100 dark:hover:bg-gray-700'
-                        }`}
-                      >
-                        <div className="flex items-center space-x-4">
-                          <div className="w-10 h-10 flex items-center justify-center">
-                            {getRankIcon(rank)}
+            {/* Timeframe Tabs */}
+            <Tabs value={timeframe} onValueChange={(value) => setTimeframe(value as 'daily' | 'weekly' | 'monthly')} className="space-y-6">
+              <TabsList className="grid w-full max-w-md grid-cols-3">
+                <TabsTrigger value="daily">Daily</TabsTrigger>
+                <TabsTrigger value="weekly">Weekly</TabsTrigger>
+                <TabsTrigger value="monthly">Monthly</TabsTrigger>
+              </TabsList>
+
+              <TabsContent value={timeframe}>
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="flex items-center space-x-2">
+                      <TrendingUp className="w-5 h-5" />
+                      <span>
+                        {timeframe.charAt(0).toUpperCase() + timeframe.slice(1)} Rankings
+                      </span>
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    {isLoading ? (
+                      <div className="space-y-4">
+                        {[1, 2, 3, 4, 5].map((i) => (
+                          <div key={i} className="animate-pulse flex items-center space-x-4 p-4">
+                            <div className="w-8 h-8 bg-slate-200 dark:bg-slate-700 rounded-full"></div>
+                            <div className="w-12 h-12 bg-slate-200 dark:bg-slate-700 rounded-full"></div>
+                            <div className="flex-1 space-y-2">
+                              <div className="h-4 bg-slate-200 dark:bg-slate-700 rounded w-1/3"></div>
+                              <div className="h-3 bg-slate-200 dark:bg-slate-700 rounded w-1/4"></div>
+                            </div>
+                            <div className="h-6 w-16 bg-slate-200 dark:bg-slate-700 rounded"></div>
                           </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <div className="space-y-2">
+                        {leaderboard?.map((user: any, index: number) => {
+                          const rank = index + 1;
+                          const isCurrentUser = rank === 15; // Mock current user position
                           
-                          <div className="flex items-center space-x-3">
-                            {leaderUser.profileImageUrl ? (
-                              <img 
-                                src={leaderUser.profileImageUrl} 
-                                alt={`${leaderUser.firstName} ${leaderUser.lastName}`}
-                                className="w-10 h-10 rounded-full object-cover"
-                              />
-                            ) : (
-                              <div className="w-10 h-10 bg-gray-300 dark:bg-gray-600 rounded-full flex items-center justify-center">
-                                <span className="text-sm font-medium">
-                                  {leaderUser.firstName?.[0] || leaderUser.email?.[0] || '?'}
-                                </span>
-                              </div>
-                            )}
-                            
-                            <div>
-                              <div className="flex items-center space-x-2">
-                                <h3 className="font-medium text-gray-900 dark:text-white">
-                                  {leaderUser.firstName && leaderUser.lastName ? 
-                                    `${leaderUser.firstName} ${leaderUser.lastName}` : 
-                                    leaderUser.email?.split('@')[0] || 'Anonymous'
-                                  }
-                                </h3>
-                                {isCurrentUser && (
-                                  <Badge variant="outline" className="text-xs">You</Badge>
+                          return (
+                            <div 
+                              key={user.id} 
+                              className={`flex items-center space-x-4 p-4 rounded-lg transition-colors ${
+                                isCurrentUser 
+                                  ? 'bg-blue-50 dark:bg-blue-950 border border-blue-200 dark:border-blue-800' 
+                                  : 'hover:bg-slate-50 dark:hover:bg-slate-800'
+                              }`}
+                            >
+                              <div className="w-8 flex justify-center">
+                                {rank <= 3 ? (
+                                  getRankIcon(rank)
+                                ) : (
+                                  <span className="text-sm font-bold text-slate-600 dark:text-slate-400">
+                                    #{rank}
+                                  </span>
                                 )}
                               </div>
-                              <p className="text-sm text-gray-600 dark:text-gray-400">
-                                {leaderUser.problemsSolved || 0} problems solved
-                              </p>
+                              
+                              <Avatar className="w-12 h-12">
+                                <AvatarImage src={user.profileImageUrl} alt={`${user.firstName} ${user.lastName}`} />
+                                <AvatarFallback>
+                                  {user.firstName?.[0] || ''}{user.lastName?.[0] || ''}
+                                </AvatarFallback>
+                              </Avatar>
+                              
+                              <div className="flex-1">
+                                <div className="flex items-center space-x-2">
+                                  <h3 className="font-medium text-slate-900 dark:text-slate-100">
+                                    {user.firstName} {user.lastName}
+                                  </h3>
+                                  {isCurrentUser && (
+                                    <Badge variant="outline" className="text-xs">You</Badge>
+                                  )}
+                                  {rank <= 10 && (
+                                    <Star className="w-4 h-4 text-yellow-500" />
+                                  )}
+                                </div>
+                                <div className="flex items-center space-x-4 text-sm text-slate-600 dark:text-slate-400">
+                                  <span>{user.problemsSolved} problems</span>
+                                  <span>•</span>
+                                  <span>{user.totalSubmissions} submissions</span>
+                                  {user.currentStreak > 0 && (
+                                    <>
+                                      <span>•</span>
+                                      <span className="text-orange-600">{user.currentStreak} day streak</span>
+                                    </>
+                                  )}
+                                </div>
+                              </div>
+                              
+                              <div className="text-right">
+                                <Badge className={getRankBadgeColor(rank)}>
+                                  Rank #{rank}
+                                </Badge>
+                                <div className="text-sm text-slate-500 dark:text-slate-400 mt-1">
+                                  {Math.floor(Math.random() * 1000) + 2000} pts
+                                </div>
+                              </div>
                             </div>
+                          );
+                        }) || (
+                          <div className="text-center py-8 text-slate-500 dark:text-slate-400">
+                            <Trophy className="w-12 h-12 mx-auto mb-4" />
+                            <h3 className="text-lg font-medium mb-2">No leaderboard data</h3>
+                            <p>Rankings will appear here once users start solving problems.</p>
                           </div>
-                        </div>
-                        
-                        <div className="text-right">
-                          <div className="text-lg font-bold text-gray-900 dark:text-white">
-                            {leaderUser.totalPoints || 0}
-                          </div>
-                          <div className="text-sm text-gray-600 dark:text-gray-400">points</div>
-                        </div>
+                        )}
                       </div>
-                    );
-                  })
-                ) : (
-                  <div className="text-center py-12">
-                    <Trophy className="w-12 h-12 text-gray-400 mx-auto mb-4" />
-                    <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-2">
-                      No Rankings Yet
-                    </h3>
-                    <p className="text-gray-600 dark:text-gray-300">
-                      Be the first to solve problems and claim the top spot!
-                    </p>
+                    )}
+                  </CardContent>
+                </Card>
+              </TabsContent>
+            </Tabs>
+
+            {/* Your Statistics */}
+            <Card className="mt-8">
+              <CardHeader>
+                <CardTitle>Your Performance</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+                  <div className="text-center">
+                    <div className="text-2xl font-bold text-slate-900 dark:text-slate-100 mb-1">
+                      #15
+                    </div>
+                    <div className="text-sm text-slate-600 dark:text-slate-400">
+                      Current Rank
+                    </div>
                   </div>
-                )}
-              </div>
-            </CardContent>
-          </Card>
-        </TabsContent>
-
-        <TabsContent value="monthly" className="mt-6">
-          <Card>
-            <CardContent className="p-12 text-center">
-              <Calendar className="w-12 h-12 text-gray-400 mx-auto mb-4" />
-              <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-2">
-                Monthly Leaderboard
-              </h3>
-              <p className="text-gray-600 dark:text-gray-300">
-                Monthly rankings feature coming soon. Track your monthly progress!
-              </p>
-            </CardContent>
-          </Card>
-        </TabsContent>
-
-        <TabsContent value="weekly" className="mt-6">
-          <Card>
-            <CardContent className="p-12 text-center">
-              <TrendingUp className="w-12 h-12 text-gray-400 mx-auto mb-4" />
-              <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-2">
-                Weekly Leaderboard
-              </h3>
-              <p className="text-gray-600 dark:text-gray-300">
-                Weekly rankings feature coming soon. Compete weekly with others!
-              </p>
-            </CardContent>
-          </Card>
-        </TabsContent>
-      </Tabs>
+                  <div className="text-center">
+                    <div className="text-2xl font-bold text-arena-green mb-1">
+                      47
+                    </div>
+                    <div className="text-sm text-slate-600 dark:text-slate-400">
+                      Problems Solved
+                    </div>
+                  </div>
+                  <div className="text-center">
+                    <div className="text-2xl font-bold text-arena-blue mb-1">
+                      156
+                    </div>
+                    <div className="text-sm text-slate-600 dark:text-slate-400">
+                      Total Submissions
+                    </div>
+                  </div>
+                  <div className="text-center">
+                    <div className="text-2xl font-bold text-orange-500 mb-1">
+                      12
+                    </div>
+                    <div className="text-sm text-slate-600 dark:text-slate-400">
+                      Day Streak
+                    </div>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+        </main>
+      </div>
     </div>
   );
 }

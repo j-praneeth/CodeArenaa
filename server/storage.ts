@@ -3,8 +3,8 @@ import {
   problems,
   submissions,
   contests,
+  courses,
   userProgress,
-  contestSubmissions,
   type User,
   type UpsertUser,
   type Problem,
@@ -13,18 +13,22 @@ import {
   type InsertSubmission,
   type Contest,
   type InsertContest,
+  type Course,
+  type InsertCourse,
   type UserProgress,
+  type InsertUserProgress,
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, desc, asc, and, sql, inArray } from "drizzle-orm";
 
+// Interface for storage operations
 export interface IStorage {
-  // User operations (mandatory for Replit Auth)
+  // User operations (IMPORTANT) these user operations are mandatory for Replit Auth.
   getUser(id: string): Promise<User | undefined>;
   upsertUser(user: UpsertUser): Promise<User>;
   
   // Problem operations
-  getProblems(limit?: number, difficulty?: string): Promise<Problem[]>;
+  getProblems(): Promise<Problem[]>;
   getProblem(id: number): Promise<Problem | undefined>;
   createProblem(problem: InsertProblem): Promise<Problem>;
   updateProblem(id: number, problem: Partial<InsertProblem>): Promise<Problem>;
@@ -32,25 +36,42 @@ export interface IStorage {
   
   // Submission operations
   getSubmissions(userId?: string, problemId?: number): Promise<Submission[]>;
+  getSubmission(id: number): Promise<Submission | undefined>;
   createSubmission(submission: InsertSubmission): Promise<Submission>;
-  updateSubmission(id: number, update: Partial<Submission>): Promise<Submission>;
-  getSubmissionsByUser(userId: string, limit?: number): Promise<Submission[]>;
+  getUserSubmissionStats(userId: string): Promise<{
+    total: number;
+    accepted: number;
+    streak: number;
+  }>;
   
   // Contest operations
   getContests(): Promise<Contest[]>;
   getContest(id: number): Promise<Contest | undefined>;
   createContest(contest: InsertContest): Promise<Contest>;
   updateContest(id: number, contest: Partial<InsertContest>): Promise<Contest>;
-  registerForContest(contestId: number, userId: string): Promise<void>;
+  deleteContest(id: number): Promise<void>;
+  
+  // Course operations
+  getCourses(): Promise<Course[]>;
+  getCourse(id: number): Promise<Course | undefined>;
+  createCourse(course: InsertCourse): Promise<Course>;
+  updateCourse(id: number, course: Partial<InsertCourse>): Promise<Course>;
+  deleteCourse(id: number): Promise<void>;
   
   // User progress operations
-  getUserProgress(userId: string): Promise<UserProgress | undefined>;
-  updateUserProgress(userId: string, update: Partial<UserProgress>): Promise<UserProgress>;
-  getLeaderboard(limit?: number): Promise<(UserProgress & { user: User })[]>;
+  getUserProgress(userId: string): Promise<UserProgress[]>;
+  updateUserProgress(progress: InsertUserProgress): Promise<UserProgress>;
+  
+  // Leaderboard operations
+  getLeaderboard(limit?: number): Promise<Array<{
+    user: User;
+    problemsSolved: number;
+    totalScore: number;
+  }>>;
 }
 
 export class DatabaseStorage implements IStorage {
-  // User operations
+  // User operations (IMPORTANT) these user operations are mandatory for Replit Auth.
   async getUser(id: string): Promise<User | undefined> {
     const [user] = await db.select().from(users).where(eq(users.id, id));
     return user;
@@ -68,37 +89,24 @@ export class DatabaseStorage implements IStorage {
         },
       })
       .returning();
-    
-    // Initialize user progress if new user
-    await db
-      .insert(userProgress)
-      .values({ userId: user.id })
-      .onConflictDoNothing();
-    
     return user;
   }
-
+  
   // Problem operations
-  async getProblems(limit = 50, difficulty?: string): Promise<Problem[]> {
-    let query = db.select().from(problems).where(eq(problems.status, "published"));
-    
-    if (difficulty) {
-      query = query.where(and(eq(problems.status, "published"), eq(problems.difficulty, difficulty as any)));
-    }
-    
-    return await query.orderBy(desc(problems.createdAt)).limit(limit);
+  async getProblems(): Promise<Problem[]> {
+    return await db.select().from(problems).where(eq(problems.isPublic, true)).orderBy(asc(problems.id));
   }
-
+  
   async getProblem(id: number): Promise<Problem | undefined> {
     const [problem] = await db.select().from(problems).where(eq(problems.id, id));
     return problem;
   }
-
+  
   async createProblem(problem: InsertProblem): Promise<Problem> {
     const [newProblem] = await db.insert(problems).values(problem).returning();
     return newProblem;
   }
-
+  
   async updateProblem(id: number, problem: Partial<InsertProblem>): Promise<Problem> {
     const [updatedProblem] = await db
       .update(problems)
@@ -107,11 +115,11 @@ export class DatabaseStorage implements IStorage {
       .returning();
     return updatedProblem;
   }
-
+  
   async deleteProblem(id: number): Promise<void> {
     await db.delete(problems).where(eq(problems.id, id));
   }
-
+  
   // Submission operations
   async getSubmissions(userId?: string, problemId?: number): Promise<Submission[]> {
     let query = db.select().from(submissions);
@@ -124,66 +132,82 @@ export class DatabaseStorage implements IStorage {
       query = query.where(eq(submissions.problemId, problemId));
     }
     
-    return await query.orderBy(desc(submissions.createdAt));
+    return await query.orderBy(desc(submissions.submittedAt));
   }
-
+  
+  async getSubmission(id: number): Promise<Submission | undefined> {
+    const [submission] = await db.select().from(submissions).where(eq(submissions.id, id));
+    return submission;
+  }
+  
   async createSubmission(submission: InsertSubmission): Promise<Submission> {
     const [newSubmission] = await db.insert(submissions).values(submission).returning();
     
-    // Update user's total submissions
-    await db
-      .update(userProgress)
-      .set({
-        totalSubmissions: sql`${userProgress.totalSubmissions} + 1`,
-        updatedAt: new Date(),
-      })
-      .where(eq(userProgress.userId, submission.userId));
+    // Update user progress
+    await this.updateUserProgress({
+      userId: submission.userId,
+      problemId: submission.problemId,
+      status: submission.status === 'accepted' ? 'solved' : 'in_progress',
+      bestScore: submission.score ? parseFloat(submission.score) : undefined,
+      attempts: 1,
+      lastAttempt: new Date(),
+      solvedAt: submission.status === 'accepted' ? new Date() : undefined,
+    });
     
     return newSubmission;
   }
-
-  async updateSubmission(id: number, update: Partial<Submission>): Promise<Submission> {
-    const [updatedSubmission] = await db
-      .update(submissions)
-      .set(update)
-      .where(eq(submissions.id, id))
-      .returning();
-    
-    // If submission was accepted, update user progress
-    if (update.status === "accepted") {
-      const submission = await db.select().from(submissions).where(eq(submissions.id, id));
-      if (submission.length > 0) {
-        await this.updateUserProgressOnSolve(submission[0].userId);
-      }
-    }
-    
-    return updatedSubmission;
-  }
-
-  async getSubmissionsByUser(userId: string, limit = 10): Promise<Submission[]> {
-    return await db
+  
+  async getUserSubmissionStats(userId: string): Promise<{
+    total: number;
+    accepted: number;
+    streak: number;
+  }> {
+    const userSubmissions = await db
       .select()
       .from(submissions)
       .where(eq(submissions.userId, userId))
-      .orderBy(desc(submissions.createdAt))
-      .limit(limit);
+      .orderBy(desc(submissions.submittedAt));
+    
+    const total = userSubmissions.length;
+    const accepted = userSubmissions.filter(s => s.status === 'accepted').length;
+    
+    // Calculate streak (simplified - count consecutive days with submissions)
+    let streak = 0;
+    const today = new Date();
+    const oneDayMs = 24 * 60 * 60 * 1000;
+    
+    for (let i = 0; i < 30; i++) { // Check last 30 days
+      const checkDate = new Date(today.getTime() - i * oneDayMs);
+      const hasSubmission = userSubmissions.some(s => {
+        const submissionDate = new Date(s.submittedAt!);
+        return submissionDate.toDateString() === checkDate.toDateString();
+      });
+      
+      if (hasSubmission) {
+        streak++;
+      } else if (i > 0) { // Don't break on first day if no submission today
+        break;
+      }
+    }
+    
+    return { total, accepted, streak };
   }
-
+  
   // Contest operations
   async getContests(): Promise<Contest[]> {
-    return await db.select().from(contests).orderBy(desc(contests.startTime));
+    return await db.select().from(contests).where(eq(contests.isPublic, true)).orderBy(asc(contests.startTime));
   }
-
+  
   async getContest(id: number): Promise<Contest | undefined> {
     const [contest] = await db.select().from(contests).where(eq(contests.id, id));
     return contest;
   }
-
+  
   async createContest(contest: InsertContest): Promise<Contest> {
     const [newContest] = await db.insert(contests).values(contest).returning();
     return newContest;
   }
-
+  
   async updateContest(id: number, contest: Partial<InsertContest>): Promise<Contest> {
     const [updatedContest] = await db
       .update(contests)
@@ -192,78 +216,98 @@ export class DatabaseStorage implements IStorage {
       .returning();
     return updatedContest;
   }
-
-  async registerForContest(contestId: number, userId: string): Promise<void> {
-    await db
-      .update(contests)
-      .set({
-        participants: sql`array_append(${contests.participants}, ${userId})`,
-        updatedAt: new Date(),
-      })
-      .where(eq(contests.id, contestId));
+  
+  async deleteContest(id: number): Promise<void> {
+    await db.delete(contests).where(eq(contests.id, id));
   }
-
-  // User progress operations
-  async getUserProgress(userId: string): Promise<UserProgress | undefined> {
-    const [progress] = await db.select().from(userProgress).where(eq(userProgress.userId, userId));
-    return progress;
+  
+  // Course operations
+  async getCourses(): Promise<Course[]> {
+    return await db.select().from(courses).where(eq(courses.isPublic, true)).orderBy(asc(courses.id));
   }
-
-  async updateUserProgress(userId: string, update: Partial<UserProgress>): Promise<UserProgress> {
-    const [updatedProgress] = await db
-      .update(userProgress)
-      .set({ ...update, updatedAt: new Date() })
-      .where(eq(userProgress.userId, userId))
+  
+  async getCourse(id: number): Promise<Course | undefined> {
+    const [course] = await db.select().from(courses).where(eq(courses.id, id));
+    return course;
+  }
+  
+  async createCourse(course: InsertCourse): Promise<Course> {
+    const [newCourse] = await db.insert(courses).values(course).returning();
+    return newCourse;
+  }
+  
+  async updateCourse(id: number, course: Partial<InsertCourse>): Promise<Course> {
+    const [updatedCourse] = await db
+      .update(courses)
+      .set({ ...course, updatedAt: new Date() })
+      .where(eq(courses.id, id))
       .returning();
-    return updatedProgress;
+    return updatedCourse;
   }
-
-  async getLeaderboard(limit = 10): Promise<(UserProgress & { user: User })[]> {
-    return await db
-      .select({
-        id: userProgress.id,
-        userId: userProgress.userId,
-        problemsSolved: userProgress.problemsSolved,
-        totalSubmissions: userProgress.totalSubmissions,
-        currentStreak: userProgress.currentStreak,
-        maxStreak: userProgress.maxStreak,
-        lastSolvedAt: userProgress.lastSolvedAt,
-        totalPoints: userProgress.totalPoints,
-        contestRank: userProgress.contestRank,
-        updatedAt: userProgress.updatedAt,
-        user: users,
-      })
+  
+  async deleteCourse(id: number): Promise<void> {
+    await db.delete(courses).where(eq(courses.id, id));
+  }
+  
+  // User progress operations
+  async getUserProgress(userId: string): Promise<UserProgress[]> {
+    return await db.select().from(userProgress).where(eq(userProgress.userId, userId));
+  }
+  
+  async updateUserProgress(progress: InsertUserProgress): Promise<UserProgress> {
+    const existing = await db
+      .select()
       .from(userProgress)
-      .innerJoin(users, eq(userProgress.userId, users.id))
-      .orderBy(desc(userProgress.totalPoints), desc(userProgress.problemsSolved))
-      .limit(limit);
-  }
-
-  // Helper method to update user progress when they solve a problem
-  private async updateUserProgressOnSolve(userId: string): Promise<void> {
-    const progress = await this.getUserProgress(userId);
-    if (progress) {
-      const now = new Date();
-      const lastSolved = progress.lastSolvedAt;
-      
-      let newStreak = 1;
-      if (lastSolved) {
-        const daysDiff = Math.floor((now.getTime() - lastSolved.getTime()) / (1000 * 60 * 60 * 24));
-        if (daysDiff === 1) {
-          newStreak = progress.currentStreak + 1;
-        } else if (daysDiff === 0) {
-          newStreak = progress.currentStreak;
-        }
-      }
-      
-      await this.updateUserProgress(userId, {
-        problemsSolved: progress.problemsSolved + 1,
-        currentStreak: newStreak,
-        maxStreak: Math.max(progress.maxStreak, newStreak),
-        lastSolvedAt: now,
-        totalPoints: progress.totalPoints + 100, // Base points for solving a problem
-      });
+      .where(and(
+        eq(userProgress.userId, progress.userId),
+        eq(userProgress.problemId, progress.problemId)
+      ));
+    
+    if (existing.length > 0) {
+      const [updated] = await db
+        .update(userProgress)
+        .set({
+          ...progress,
+          attempts: sql`${userProgress.attempts} + 1`,
+        })
+        .where(and(
+          eq(userProgress.userId, progress.userId),
+          eq(userProgress.problemId, progress.problemId)
+        ))
+        .returning();
+      return updated;
+    } else {
+      const [newProgress] = await db.insert(userProgress).values(progress).returning();
+      return newProgress;
     }
+  }
+  
+  // Leaderboard operations
+  async getLeaderboard(limit: number = 10): Promise<Array<{
+    user: User;
+    problemsSolved: number;
+    totalScore: number;
+  }>> {
+    const result = await db
+      .select({
+        user: users,
+        problemsSolved: sql<number>`count(distinct ${userProgress.problemId})`.as('problems_solved'),
+        totalScore: sql<number>`coalesce(sum(${userProgress.bestScore}), 0)`.as('total_score'),
+      })
+      .from(users)
+      .leftJoin(userProgress, and(
+        eq(users.id, userProgress.userId),
+        eq(userProgress.status, 'solved')
+      ))
+      .groupBy(users.id)
+      .orderBy(desc(sql`problems_solved`), desc(sql`total_score`))
+      .limit(limit);
+    
+    return result.map(row => ({
+      user: row.user,
+      problemsSolved: row.problemsSolved,
+      totalScore: row.totalScore,
+    }));
   }
 }
 

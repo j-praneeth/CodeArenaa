@@ -1,166 +1,192 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
+import { Navigation } from "@/components/layout/navigation";
+import { Sidebar } from "@/components/layout/sidebar";
+import { ProblemModal } from "@/components/problems/problem-modal";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Search, Filter } from "lucide-react";
-import { Link } from "wouter";
+import type { Problem } from "@shared/schema";
 
 export default function Problems() {
+  const [selectedProblem, setSelectedProblem] = useState<Problem | null>(null);
   const [searchTerm, setSearchTerm] = useState("");
-  const [difficultyFilter, setDifficultyFilter] = useState<string>("all");
+  const [difficultyFilter, setDifficultyFilter] = useState("all");
+  const [isModalOpen, setIsModalOpen] = useState(false);
 
   const { data: problems, isLoading } = useQuery({
-    queryKey: ["/api/problems", difficultyFilter],
-    queryKey: difficultyFilter === "all" ? ["/api/problems"] : ["/api/problems", { difficulty: difficultyFilter }],
+    queryKey: ["/api/problems"],
+    retry: false,
   });
 
-  const filteredProblems = problems?.filter(problem =>
-    problem.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    problem.tags?.some(tag => tag.toLowerCase().includes(searchTerm.toLowerCase()))
-  );
+  const filteredProblems = problems?.filter((problem: Problem) => {
+    const matchesSearch = problem.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                         problem.description.toLowerCase().includes(searchTerm.toLowerCase());
+    const matchesDifficulty = difficultyFilter === "all" || problem.difficulty === difficultyFilter;
+    return matchesSearch && matchesDifficulty;
+  }) || [];
 
   const getDifficultyColor = (difficulty: string) => {
     switch (difficulty.toLowerCase()) {
-      case 'easy': return 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-300';
-      case 'medium': return 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-300';
-      case 'hard': return 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-300';
-      default: return 'bg-gray-100 text-gray-800 dark:bg-gray-900 dark:text-gray-300';
+      case "easy":
+        return "bg-green-100 text-green-800 dark:bg-green-900/20 dark:text-green-400";
+      case "medium":
+        return "bg-yellow-100 text-yellow-800 dark:bg-yellow-900/20 dark:text-yellow-400";
+      case "hard":
+        return "bg-red-100 text-red-800 dark:bg-red-900/20 dark:text-red-400";
+      default:
+        return "bg-gray-100 text-gray-800 dark:bg-gray-900/20 dark:text-gray-400";
     }
   };
 
-  if (isLoading) {
-    return (
-      <div className="p-6">
-        <div className="space-y-4">
-          <div className="h-8 bg-gray-200 dark:bg-gray-700 rounded w-1/3 animate-pulse"></div>
-          <div className="h-12 bg-gray-200 dark:bg-gray-700 rounded animate-pulse"></div>
-          <div className="grid gap-4">
-            {[...Array(6)].map((_, i) => (
-              <div key={i} className="h-24 bg-gray-200 dark:bg-gray-700 rounded animate-pulse"></div>
-            ))}
-          </div>
-        </div>
-      </div>
-    );
-  }
+  const handleProblemClick = (problem: Problem) => {
+    setSelectedProblem(problem);
+    setIsModalOpen(true);
+  };
+
+  const handleCloseModal = () => {
+    setIsModalOpen(false);
+    setSelectedProblem(null);
+  };
 
   return (
-    <div className="p-6">
-      {/* Header */}
-      <div className="mb-8">
-        <h1 className="text-2xl font-bold text-gray-900 dark:text-white mb-2">Problems</h1>
-        <p className="text-gray-600 dark:text-gray-300">
-          Sharpen your coding skills with our curated problem sets.
-        </p>
-      </div>
+    <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
+      <Navigation />
+      <div className="flex">
+        <Sidebar />
+        
+        <main className="flex-1 overflow-auto">
+          <div className="p-6">
+            {/* Header */}
+            <div className="mb-8">
+              <h1 className="text-2xl font-bold text-gray-900 dark:text-white mb-2">
+                Practice Problems
+              </h1>
+              <p className="text-gray-600 dark:text-gray-400">
+                Choose from our collection of coding challenges to improve your skills.
+              </p>
+            </div>
 
-      {/* Filters */}
-      <div className="mb-6 flex flex-col sm:flex-row gap-4">
-        <div className="relative flex-1">
-          <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
-          <Input
-            placeholder="Search problems..."
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            className="pl-10"
-          />
-        </div>
-        <Select value={difficultyFilter} onValueChange={setDifficultyFilter}>
-          <SelectTrigger className="w-full sm:w-48">
-            <Filter className="w-4 h-4 mr-2" />
-            <SelectValue placeholder="Filter by difficulty" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">All Difficulties</SelectItem>
-            <SelectItem value="easy">Easy</SelectItem>
-            <SelectItem value="medium">Medium</SelectItem>
-            <SelectItem value="hard">Hard</SelectItem>
-          </SelectContent>
-        </Select>
-      </div>
-
-      {/* Problems Grid */}
-      <div className="grid gap-4">
-        {filteredProblems?.length ? (
-          filteredProblems.map((problem) => (
-            <Card key={problem.id} className="hover:shadow-lg transition-shadow">
-              <CardContent className="p-6">
-                <div className="flex items-center justify-between">
-                  <div className="flex-1">
-                    <div className="flex items-center space-x-3 mb-3">
-                      <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
-                        {problem.title}
-                      </h3>
-                      <Badge className={getDifficultyColor(problem.difficulty)}>
-                        {problem.difficulty}
-                      </Badge>
-                    </div>
-                    
-                    <p className="text-gray-600 dark:text-gray-300 mb-3 line-clamp-2">
-                      {problem.description.length > 150 
-                        ? `${problem.description.substring(0, 150)}...`
-                        : problem.description
-                      }
-                    </p>
-
-                    {problem.tags && problem.tags.length > 0 && (
-                      <div className="flex flex-wrap gap-2 mb-3">
-                        {problem.tags.slice(0, 3).map((tag) => (
-                          <Badge key={tag} variant="outline" className="text-xs">
-                            {tag}
-                          </Badge>
-                        ))}
-                        {problem.tags.length > 3 && (
-                          <Badge variant="outline" className="text-xs">
-                            +{problem.tags.length - 3} more
-                          </Badge>
-                        )}
-                      </div>
-                    )}
+            {/* Filters */}
+            <Card className="mb-6">
+              <CardHeader>
+                <CardTitle className="flex items-center space-x-2">
+                  <Filter className="h-5 w-5" />
+                  <span>Filter Problems</span>
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="flex flex-col sm:flex-row gap-4">
+                  <div className="relative flex-1">
+                    <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
+                    <Input
+                      placeholder="Search problems..."
+                      value={searchTerm}
+                      onChange={(e) => setSearchTerm(e.target.value)}
+                      className="pl-10"
+                    />
                   </div>
-
-                  <div className="ml-6">
-                    <Link href={`/problems/${problem.id}`}>
-                      <Button className="bg-arena-green hover:bg-green-600 text-white">
-                        Solve
-                      </Button>
-                    </Link>
-                  </div>
+                  <Select value={difficultyFilter} onValueChange={setDifficultyFilter}>
+                    <SelectTrigger className="w-full sm:w-48">
+                      <SelectValue placeholder="All Difficulties" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All Difficulties</SelectItem>
+                      <SelectItem value="easy">Easy</SelectItem>
+                      <SelectItem value="medium">Medium</SelectItem>
+                      <SelectItem value="hard">Hard</SelectItem>
+                    </SelectContent>
+                  </Select>
                 </div>
               </CardContent>
             </Card>
-          ))
-        ) : (
-          <Card>
-            <CardContent className="p-12 text-center">
-              <div className="w-16 h-16 bg-gray-100 dark:bg-gray-800 rounded-full flex items-center justify-center mx-auto mb-4">
-                <Search className="w-8 h-8 text-gray-400" />
+
+            {/* Problems List */}
+            {isLoading ? (
+              <div className="grid gap-4">
+                {[...Array(6)].map((_, i) => (
+                  <Card key={i} className="animate-pulse">
+                    <CardContent className="p-6">
+                      <div className="flex items-center justify-between">
+                        <div className="space-y-2 flex-1">
+                          <div className="h-6 bg-gray-200 dark:bg-gray-700 rounded w-1/3"></div>
+                          <div className="h-4 bg-gray-200 dark:bg-gray-700 rounded w-2/3"></div>
+                          <div className="flex space-x-2">
+                            <div className="h-6 bg-gray-200 dark:bg-gray-700 rounded w-16"></div>
+                            <div className="h-6 bg-gray-200 dark:bg-gray-700 rounded w-20"></div>
+                          </div>
+                        </div>
+                        <div className="h-10 bg-gray-200 dark:bg-gray-700 rounded w-24"></div>
+                      </div>
+                    </CardContent>
+                  </Card>
+                ))}
               </div>
-              <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-2">
-                No problems found
-              </h3>
-              <p className="text-gray-600 dark:text-gray-300">
-                {searchTerm || difficultyFilter !== "all" 
-                  ? "Try adjusting your search criteria or filters."
-                  : "No problems have been added yet. Check back soon!"
-                }
-              </p>
-            </CardContent>
-          </Card>
-        )}
+            ) : (
+              <div className="grid gap-4">
+                {filteredProblems.map((problem) => (
+                  <Card 
+                    key={problem.id} 
+                    className="hover:shadow-md transition-shadow cursor-pointer"
+                    onClick={() => handleProblemClick(problem)}
+                  >
+                    <CardContent className="p-6">
+                      <div className="flex items-center justify-between">
+                        <div className="flex-1">
+                          <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-2">
+                            {problem.title}
+                          </h3>
+                          <p className="text-gray-600 dark:text-gray-400 text-sm mb-3 line-clamp-2">
+                            {problem.description.replace(/<[^>]*>/g, '').substring(0, 150)}...
+                          </p>
+                          <div className="flex items-center space-x-3">
+                            <Badge className={getDifficultyColor(problem.difficulty)}>
+                              {problem.difficulty}
+                            </Badge>
+                            {problem.tags && problem.tags.length > 0 && (
+                              <div className="flex space-x-1">
+                                {problem.tags.slice(0, 3).map((tag, index) => (
+                                  <Badge key={index} variant="outline" className="text-xs">
+                                    {tag}
+                                  </Badge>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                        <Button className="ml-4">
+                          Solve Problem
+                        </Button>
+                      </div>
+                    </CardContent>
+                  </Card>
+                ))}
+              </div>
+            )}
+
+            {!isLoading && filteredProblems.length === 0 && (
+              <Card>
+                <CardContent className="p-12 text-center">
+                  <div className="text-gray-500 dark:text-gray-400">
+                    <Search className="h-12 w-12 mx-auto mb-4 opacity-50" />
+                    <h3 className="text-lg font-medium mb-2">No problems found</h3>
+                    <p>Try adjusting your search criteria or filters.</p>
+                  </div>
+                </CardContent>
+              </Card>
+            )}
+          </div>
+        </main>
       </div>
 
-      {/* Stats */}
-      {filteredProblems?.length ? (
-        <div className="mt-8 text-center text-gray-600 dark:text-gray-300">
-          Showing {filteredProblems.length} problem{filteredProblems.length !== 1 ? 's' : ''}
-          {searchTerm && ` matching "${searchTerm}"`}
-          {difficultyFilter !== "all" && ` with ${difficultyFilter} difficulty`}
-        </div>
-      ) : null}
+      <ProblemModal
+        problem={selectedProblem}
+        isOpen={isModalOpen}
+        onClose={handleCloseModal}
+      />
     </div>
   );
 }

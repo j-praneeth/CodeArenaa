@@ -8,13 +8,14 @@ import {
   serial,
   integer,
   boolean,
-  pgEnum,
+  decimal,
 } from "drizzle-orm/pg-core";
 import { relations } from "drizzle-orm";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
-// Session storage table (mandatory for Replit Auth)
+// Session storage table.
+// (IMPORTANT) This table is mandatory for Replit Auth, don't drop it.
 export const sessions = pgTable(
   "sessions",
   {
@@ -25,130 +26,130 @@ export const sessions = pgTable(
   (table) => [index("IDX_session_expire").on(table.expire)],
 );
 
-// User storage table (mandatory for Replit Auth)
+// User storage table.
+// (IMPORTANT) This table is mandatory for Replit Auth, don't drop it.
 export const users = pgTable("users", {
   id: varchar("id").primaryKey().notNull(),
   email: varchar("email").unique(),
   firstName: varchar("first_name"),
   lastName: varchar("last_name"),
   profileImageUrl: varchar("profile_image_url"),
-  role: varchar("role").default("student").notNull(), // student, admin
+  role: varchar("role").notNull().default("student"), // student, admin
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 });
 
-export const difficultyEnum = pgEnum("difficulty", ["easy", "medium", "hard"]);
-export const statusEnum = pgEnum("status", ["draft", "published", "archived"]);
-export const submissionStatusEnum = pgEnum("submission_status", ["pending", "accepted", "wrong_answer", "time_limit_exceeded", "runtime_error"]);
-
-// Problems table
 export const problems = pgTable("problems", {
   id: serial("id").primaryKey(),
-  title: varchar("title").notNull(),
+  title: text("title").notNull(),
   description: text("description").notNull(),
-  difficulty: difficultyEnum("difficulty").notNull(),
-  tags: text("tags").array().default([]),
-  testCases: jsonb("test_cases").notNull(), // Array of {input, expectedOutput}
-  starterCode: jsonb("starter_code").notNull(), // Object with language keys
+  difficulty: varchar("difficulty").notNull(), // easy, medium, hard
+  tags: text("tags").array(),
   constraints: text("constraints"),
-  examples: jsonb("examples").notNull(), // Array of examples
-  status: statusEnum("status").default("draft"),
+  examples: jsonb("examples"), // Array of example inputs/outputs
+  testCases: jsonb("test_cases"), // Array of test cases
+  timeLimit: integer("time_limit").default(1000), // milliseconds
+  memoryLimit: integer("memory_limit").default(256), // MB
+  starterCode: jsonb("starter_code"), // Object with language -> code mappings
+  isPublic: boolean("is_public").default(true),
   createdBy: varchar("created_by").references(() => users.id),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 });
 
-// Submissions table
 export const submissions = pgTable("submissions", {
   id: serial("id").primaryKey(),
-  userId: varchar("user_id").references(() => users.id).notNull(),
   problemId: integer("problem_id").references(() => problems.id).notNull(),
+  userId: varchar("user_id").references(() => users.id).notNull(),
   code: text("code").notNull(),
   language: varchar("language").notNull(),
-  status: submissionStatusEnum("status").default("pending"),
-  runtime: integer("runtime"), // in milliseconds
-  memory: integer("memory"), // in KB
-  testCaseResults: jsonb("test_case_results"), // Array of test case results
-  createdAt: timestamp("created_at").defaultNow(),
-});
-
-// Contests table
-export const contests = pgTable("contests", {
-  id: serial("id").primaryKey(),
-  title: varchar("title").notNull(),
-  description: text("description"),
-  startTime: timestamp("start_time").notNull(),
-  endTime: timestamp("end_time").notNull(),
-  problemIds: integer("problem_ids").array().notNull(),
-  participants: varchar("participants").array().default([]),
-  prizePool: varchar("prize_pool"),
-  status: statusEnum("status").default("draft"),
-  createdBy: varchar("created_by").references(() => users.id),
-  createdAt: timestamp("created_at").defaultNow(),
-  updatedAt: timestamp("updated_at").defaultNow(),
-});
-
-// Contest Submissions table
-export const contestSubmissions = pgTable("contest_submissions", {
-  id: serial("id").primaryKey(),
-  contestId: integer("contest_id").references(() => contests.id).notNull(),
-  userId: varchar("user_id").references(() => users.id).notNull(),
-  problemId: integer("problem_id").references(() => problems.id).notNull(),
-  submissionId: integer("submission_id").references(() => submissions.id).notNull(),
-  points: integer("points").default(0),
+  status: varchar("status").notNull(), // pending, accepted, wrong_answer, time_limit_exceeded, runtime_error
+  runtime: integer("runtime"), // milliseconds
+  memory: integer("memory"), // MB
+  score: decimal("score", { precision: 5, scale: 2 }), // 0-100
+  feedback: text("feedback"),
   submittedAt: timestamp("submitted_at").defaultNow(),
 });
 
-// User Progress table
-export const userProgress = pgTable("user_progress", {
+export const contests = pgTable("contests", {
   id: serial("id").primaryKey(),
-  userId: varchar("user_id").references(() => users.id).notNull(),
-  problemsSolved: integer("problems_solved").default(0),
-  totalSubmissions: integer("total_submissions").default(0),
-  currentStreak: integer("current_streak").default(0),
-  maxStreak: integer("max_streak").default(0),
-  lastSolvedAt: timestamp("last_solved_at"),
-  totalPoints: integer("total_points").default(0),
-  contestRank: integer("contest_rank"),
+  title: text("title").notNull(),
+  description: text("description"),
+  startTime: timestamp("start_time").notNull(),
+  endTime: timestamp("end_time").notNull(),
+  problems: integer("problems").array(), // Array of problem IDs
+  participants: text("participants").array(), // Array of user IDs
+  isPublic: boolean("is_public").default(true),
+  prizePool: decimal("prize_pool", { precision: 10, scale: 2 }),
+  createdBy: varchar("created_by").references(() => users.id),
+  createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 });
 
+export const courses = pgTable("courses", {
+  id: serial("id").primaryKey(),
+  title: text("title").notNull(),
+  description: text("description"),
+  problems: integer("problems").array(), // Array of problem IDs in order
+  enrolledUsers: text("enrolled_users").array(), // Array of user IDs
+  isPublic: boolean("is_public").default(true),
+  createdBy: varchar("created_by").references(() => users.id),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const userProgress = pgTable("user_progress", {
+  id: serial("id").primaryKey(),
+  userId: varchar("user_id").references(() => users.id).notNull(),
+  problemId: integer("problem_id").references(() => problems.id).notNull(),
+  status: varchar("status").notNull(), // not_started, in_progress, solved
+  bestScore: decimal("best_score", { precision: 5, scale: 2 }),
+  attempts: integer("attempts").default(0),
+  lastAttempt: timestamp("last_attempt"),
+  solvedAt: timestamp("solved_at"),
+});
+
 // Relations
-export const usersRelations = relations(users, ({ many, one }) => ({
+export const usersRelations = relations(users, ({ many }) => ({
   submissions: many(submissions),
   createdProblems: many(problems),
   createdContests: many(contests),
-  progress: one(userProgress, {
-    fields: [users.id],
-    references: [userProgress.userId],
-  }),
+  createdCourses: many(courses),
+  progress: many(userProgress),
 }));
 
-export const problemsRelations = relations(problems, ({ many, one }) => ({
-  submissions: many(submissions),
+export const problemsRelations = relations(problems, ({ one, many }) => ({
   creator: one(users, {
     fields: [problems.createdBy],
     references: [users.id],
   }),
+  submissions: many(submissions),
+  progress: many(userProgress),
 }));
 
 export const submissionsRelations = relations(submissions, ({ one }) => ({
-  user: one(users, {
-    fields: [submissions.userId],
-    references: [users.id],
-  }),
   problem: one(problems, {
     fields: [submissions.problemId],
     references: [problems.id],
   }),
+  user: one(users, {
+    fields: [submissions.userId],
+    references: [users.id],
+  }),
 }));
 
-export const contestsRelations = relations(contests, ({ one, many }) => ({
+export const contestsRelations = relations(contests, ({ one }) => ({
   creator: one(users, {
     fields: [contests.createdBy],
     references: [users.id],
   }),
-  contestSubmissions: many(contestSubmissions),
+}));
+
+export const coursesRelations = relations(courses, ({ one }) => ({
+  creator: one(users, {
+    fields: [courses.createdBy],
+    references: [users.id],
+  }),
 }));
 
 export const userProgressRelations = relations(userProgress, ({ one }) => ({
@@ -156,15 +157,16 @@ export const userProgressRelations = relations(userProgress, ({ one }) => ({
     fields: [userProgress.userId],
     references: [users.id],
   }),
+  problem: one(problems, {
+    fields: [userProgress.problemId],
+    references: [problems.id],
+  }),
 }));
 
-// Zod schemas
-export const insertUserSchema = createInsertSchema(users).pick({
-  email: true,
-  firstName: true,
-  lastName: true,
-  profileImageUrl: true,
-  role: true,
+// Insert schemas
+export const insertUserSchema = createInsertSchema(users).omit({
+  createdAt: true,
+  updatedAt: true,
 });
 
 export const insertProblemSchema = createInsertSchema(problems).omit({
@@ -175,11 +177,7 @@ export const insertProblemSchema = createInsertSchema(problems).omit({
 
 export const insertSubmissionSchema = createInsertSchema(submissions).omit({
   id: true,
-  createdAt: true,
-  status: true,
-  runtime: true,
-  memory: true,
-  testCaseResults: true,
+  submittedAt: true,
 });
 
 export const insertContestSchema = createInsertSchema(contests).omit({
@@ -188,8 +186,18 @@ export const insertContestSchema = createInsertSchema(contests).omit({
   updatedAt: true,
 });
 
+export const insertCourseSchema = createInsertSchema(courses).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export const insertUserProgressSchema = createInsertSchema(userProgress).omit({
+  id: true,
+});
+
 // Types
-export type UpsertUser = z.infer<typeof insertUserSchema>;
+export type UpsertUser = typeof users.$inferInsert;
 export type User = typeof users.$inferSelect;
 export type InsertProblem = z.infer<typeof insertProblemSchema>;
 export type Problem = typeof problems.$inferSelect;
@@ -197,5 +205,7 @@ export type InsertSubmission = z.infer<typeof insertSubmissionSchema>;
 export type Submission = typeof submissions.$inferSelect;
 export type InsertContest = z.infer<typeof insertContestSchema>;
 export type Contest = typeof contests.$inferSelect;
+export type InsertCourse = z.infer<typeof insertCourseSchema>;
+export type Course = typeof courses.$inferSelect;
+export type InsertUserProgress = z.infer<typeof insertUserProgressSchema>;
 export type UserProgress = typeof userProgress.$inferSelect;
-export type ContestSubmission = typeof contestSubmissions.$inferSelect;

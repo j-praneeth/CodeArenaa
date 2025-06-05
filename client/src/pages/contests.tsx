@@ -1,194 +1,268 @@
-import { useState } from "react";
-import { useQuery, useMutation } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
+import { Navigation } from "@/components/layout/navigation";
+import { Sidebar } from "@/components/layout/sidebar";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Calendar, Clock, Users, Trophy, Plus } from "lucide-react";
-import { useAuth } from "@/hooks/useAuth";
-import ContestCard from "@/components/contest/contest-card";
+import { Badge } from "@/components/ui/badge";
+import { Calendar, Clock, Users, Trophy, MapPin } from "lucide-react";
 
 export default function Contests() {
-  const { user } = useAuth();
-  const [activeTab, setActiveTab] = useState("upcoming");
-
-  const { data: allContests, isLoading } = useQuery({
+  const { data: contests, isLoading } = useQuery({
     queryKey: ["/api/contests"],
+    retry: false,
   });
 
-  const { data: upcomingContests } = useQuery({
-    queryKey: ["/api/contests/upcoming"],
-  });
+  // Mock upcoming contests data
+  const mockContests = [
+    {
+      id: 1,
+      title: "Weekly Contest 127",
+      description: "Join our weekly competitive programming contest featuring 4 challenging problems.",
+      startTime: "2024-12-15T19:00:00Z",
+      endTime: "2024-12-15T21:30:00Z",
+      participants: 1247,
+      prizePool: "500",
+      status: "upcoming",
+      difficulty: "medium",
+    },
+    {
+      id: 2,
+      title: "Monthly Challenge December",
+      description: "Special monthly contest with exclusive prizes and recognition.",
+      startTime: "2024-12-20T18:00:00Z",
+      endTime: "2024-12-20T22:00:00Z",
+      participants: 856,
+      prizePool: "1500",
+      status: "upcoming",
+      difficulty: "hard",
+    },
+    {
+      id: 3,
+      title: "Beginner's Cup",
+      description: "Perfect contest for newcomers to competitive programming.",
+      startTime: "2024-12-10T20:00:00Z",
+      endTime: "2024-12-10T22:00:00Z",
+      participants: 2134,
+      prizePool: "200",
+      status: "completed",
+      difficulty: "easy",
+    },
+  ];
 
-  const now = new Date();
-  const ongoingContests = allContests?.filter(contest => 
-    new Date(contest.startTime) <= now && new Date(contest.endTime) >= now
-  ) || [];
+  const getStatusColor = (status: string) => {
+    switch (status) {
+      case "upcoming":
+        return "bg-blue-100 text-blue-800 dark:bg-blue-900/20 dark:text-blue-400";
+      case "live":
+        return "bg-green-100 text-green-800 dark:bg-green-900/20 dark:text-green-400";
+      case "completed":
+        return "bg-gray-100 text-gray-800 dark:bg-gray-900/20 dark:text-gray-400";
+      default:
+        return "bg-gray-100 text-gray-800 dark:bg-gray-900/20 dark:text-gray-400";
+    }
+  };
 
-  const pastContests = allContests?.filter(contest => 
-    new Date(contest.endTime) < now
-  ) || [];
+  const getDifficultyColor = (difficulty: string) => {
+    switch (difficulty) {
+      case "easy":
+        return "bg-green-100 text-green-800 dark:bg-green-900/20 dark:text-green-400";
+      case "medium":
+        return "bg-yellow-100 text-yellow-800 dark:bg-yellow-900/20 dark:text-yellow-400";
+      case "hard":
+        return "bg-red-100 text-red-800 dark:bg-red-900/20 dark:text-red-400";
+      default:
+        return "bg-gray-100 text-gray-800 dark:bg-gray-900/20 dark:text-gray-400";
+    }
+  };
 
-  if (isLoading) {
-    return (
-      <div className="p-6">
-        <div className="space-y-4">
-          <div className="h-8 bg-gray-200 dark:bg-gray-700 rounded w-1/3 animate-pulse"></div>
-          <div className="h-12 bg-gray-200 dark:bg-gray-700 rounded animate-pulse"></div>
-          <div className="grid gap-4">
-            {[...Array(3)].map((_, i) => (
-              <div key={i} className="h-32 bg-gray-200 dark:bg-gray-700 rounded animate-pulse"></div>
-            ))}
-          </div>
-        </div>
-      </div>
-    );
-  }
+  const formatDate = (dateString: string) => {
+    const date = new Date(dateString);
+    return date.toLocaleDateString("en-US", {
+      weekday: "short",
+      year: "numeric",
+      month: "short",
+      day: "numeric",
+    });
+  };
+
+  const formatTime = (dateString: string) => {
+    const date = new Date(dateString);
+    return date.toLocaleTimeString("en-US", {
+      hour: "2-digit",
+      minute: "2-digit",
+      timeZoneName: "short",
+    });
+  };
+
+  const upcomingContests = mockContests.filter(c => c.status === "upcoming");
+  const completedContests = mockContests.filter(c => c.status === "completed");
 
   return (
-    <div className="p-6">
-      {/* Header */}
-      <div className="mb-8 flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900 dark:text-white mb-2">Contests</h1>
-          <p className="text-gray-600 dark:text-gray-300">
-            Compete with developers worldwide in programming contests.
-          </p>
-        </div>
-        {user?.role === 'admin' && (
-          <Button className="bg-arena-green hover:bg-green-600 text-white">
-            <Plus className="w-4 h-4 mr-2" />
-            Create Contest
-          </Button>
-        )}
+    <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
+      <Navigation />
+      <div className="flex">
+        <Sidebar />
+        
+        <main className="flex-1 overflow-auto">
+          <div className="p-6">
+            {/* Header */}
+            <div className="mb-8">
+              <h1 className="text-2xl font-bold text-gray-900 dark:text-white mb-2">
+                Contests
+              </h1>
+              <p className="text-gray-600 dark:text-gray-400">
+                Participate in competitive programming contests and test your skills against others.
+              </p>
+            </div>
+
+            {/* Upcoming Contests */}
+            <section className="mb-12">
+              <h2 className="text-xl font-semibold text-gray-900 dark:text-white mb-6">
+                Upcoming Contests
+              </h2>
+              
+              {isLoading ? (
+                <div className="grid gap-6 md:grid-cols-2">
+                  {[...Array(2)].map((_, i) => (
+                    <Card key={i} className="animate-pulse">
+                      <CardHeader>
+                        <div className="h-6 bg-gray-200 dark:bg-gray-700 rounded w-3/4 mb-2"></div>
+                        <div className="h-4 bg-gray-200 dark:bg-gray-700 rounded w-full"></div>
+                      </CardHeader>
+                      <CardContent>
+                        <div className="space-y-3">
+                          <div className="h-4 bg-gray-200 dark:bg-gray-700 rounded w-1/2"></div>
+                          <div className="h-4 bg-gray-200 dark:bg-gray-700 rounded w-1/3"></div>
+                          <div className="h-10 bg-gray-200 dark:bg-gray-700 rounded"></div>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  ))}
+                </div>
+              ) : (
+                <div className="grid gap-6 md:grid-cols-2">
+                  {upcomingContests.map((contest) => (
+                    <Card key={contest.id} className="hover:shadow-lg transition-shadow">
+                      <CardHeader>
+                        <div className="flex items-start justify-between">
+                          <div>
+                            <CardTitle className="text-lg">{contest.title}</CardTitle>
+                            <div className="flex items-center space-x-2 mt-2">
+                              <Badge className={getStatusColor(contest.status)}>
+                                {contest.status}
+                              </Badge>
+                              <Badge className={getDifficultyColor(contest.difficulty)}>
+                                {contest.difficulty}
+                              </Badge>
+                            </div>
+                          </div>
+                          <Trophy className="h-6 w-6 text-yellow-500" />
+                        </div>
+                      </CardHeader>
+                      <CardContent>
+                        <p className="text-gray-600 dark:text-gray-400 text-sm mb-4">
+                          {contest.description}
+                        </p>
+                        
+                        <div className="space-y-3">
+                          <div className="flex items-center text-sm text-gray-600 dark:text-gray-400">
+                            <Calendar className="h-4 w-4 mr-2" />
+                            <span>{formatDate(contest.startTime)}</span>
+                          </div>
+                          
+                          <div className="flex items-center text-sm text-gray-600 dark:text-gray-400">
+                            <Clock className="h-4 w-4 mr-2" />
+                            <span>
+                              {formatTime(contest.startTime)} - {formatTime(contest.endTime)}
+                            </span>
+                          </div>
+                          
+                          <div className="flex items-center text-sm text-gray-600 dark:text-gray-400">
+                            <Users className="h-4 w-4 mr-2" />
+                            <span>{contest.participants} registered</span>
+                          </div>
+                          
+                          {contest.prizePool && (
+                            <div className="flex items-center text-sm text-gray-600 dark:text-gray-400">
+                              <Trophy className="h-4 w-4 mr-2" />
+                              <span>${contest.prizePool} Prize Pool</span>
+                            </div>
+                          )}
+                        </div>
+                        
+                        <Button className="w-full mt-6 bg-blue-500 hover:bg-blue-600 text-white">
+                          Register Now
+                        </Button>
+                      </CardContent>
+                    </Card>
+                  ))}
+                </div>
+              )}
+            </section>
+
+            {/* Past Contests */}
+            <section>
+              <h2 className="text-xl font-semibold text-gray-900 dark:text-white mb-6">
+                Past Contests
+              </h2>
+              
+              <div className="grid gap-4">
+                {completedContests.map((contest) => (
+                  <Card key={contest.id} className="hover:shadow-md transition-shadow">
+                    <CardContent className="p-6">
+                      <div className="flex items-center justify-between">
+                        <div className="flex-1">
+                          <div className="flex items-center space-x-3 mb-2">
+                            <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
+                              {contest.title}
+                            </h3>
+                            <Badge className={getStatusColor(contest.status)}>
+                              {contest.status}
+                            </Badge>
+                            <Badge className={getDifficultyColor(contest.difficulty)}>
+                              {contest.difficulty}
+                            </Badge>
+                          </div>
+                          
+                          <p className="text-gray-600 dark:text-gray-400 text-sm mb-3">
+                            {contest.description}
+                          </p>
+                          
+                          <div className="flex items-center space-x-6 text-sm text-gray-600 dark:text-gray-400">
+                            <div className="flex items-center">
+                              <Calendar className="h-4 w-4 mr-1" />
+                              <span>{formatDate(contest.startTime)}</span>
+                            </div>
+                            <div className="flex items-center">
+                              <Users className="h-4 w-4 mr-1" />
+                              <span>{contest.participants} participants</span>
+                            </div>
+                            {contest.prizePool && (
+                              <div className="flex items-center">
+                                <Trophy className="h-4 w-4 mr-1" />
+                                <span>${contest.prizePool}</span>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                        
+                        <div className="flex space-x-2">
+                          <Button variant="outline">
+                            View Results
+                          </Button>
+                          <Button variant="outline">
+                            Practice
+                          </Button>
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+                ))}
+              </div>
+            </section>
+          </div>
+        </main>
       </div>
-
-      {/* Contest Tabs */}
-      <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-        <TabsList className="grid w-full grid-cols-3">
-          <TabsTrigger value="upcoming">Upcoming ({upcomingContests?.length || 0})</TabsTrigger>
-          <TabsTrigger value="ongoing">Ongoing ({ongoingContests.length})</TabsTrigger>
-          <TabsTrigger value="past">Past ({pastContests.length})</TabsTrigger>
-        </TabsList>
-
-        <TabsContent value="upcoming" className="mt-6">
-          <div className="grid gap-6">
-            {upcomingContests?.length ? (
-              upcomingContests.map((contest) => (
-                <ContestCard key={contest.id} contest={contest} type="upcoming" />
-              ))
-            ) : (
-              <Card>
-                <CardContent className="p-12 text-center">
-                  <div className="w-16 h-16 bg-gray-100 dark:bg-gray-800 rounded-full flex items-center justify-center mx-auto mb-4">
-                    <Calendar className="w-8 h-8 text-gray-400" />
-                  </div>
-                  <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-2">
-                    No Upcoming Contests
-                  </h3>
-                  <p className="text-gray-600 dark:text-gray-300">
-                    Check back soon for new contests, or create one if you're an admin.
-                  </p>
-                </CardContent>
-              </Card>
-            )}
-          </div>
-        </TabsContent>
-
-        <TabsContent value="ongoing" className="mt-6">
-          <div className="grid gap-6">
-            {ongoingContests.length ? (
-              ongoingContests.map((contest) => (
-                <ContestCard key={contest.id} contest={contest} type="ongoing" />
-              ))
-            ) : (
-              <Card>
-                <CardContent className="p-12 text-center">
-                  <div className="w-16 h-16 bg-gray-100 dark:bg-gray-800 rounded-full flex items-center justify-center mx-auto mb-4">
-                    <Clock className="w-8 h-8 text-gray-400" />
-                  </div>
-                  <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-2">
-                    No Ongoing Contests
-                  </h3>
-                  <p className="text-gray-600 dark:text-gray-300">
-                    No contests are currently active. Check the upcoming tab for scheduled contests.
-                  </p>
-                </CardContent>
-              </Card>
-            )}
-          </div>
-        </TabsContent>
-
-        <TabsContent value="past" className="mt-6">
-          <div className="grid gap-6">
-            {pastContests.length ? (
-              pastContests.map((contest) => (
-                <ContestCard key={contest.id} contest={contest} type="past" />
-              ))
-            ) : (
-              <Card>
-                <CardContent className="p-12 text-center">
-                  <div className="w-16 h-16 bg-gray-100 dark:bg-gray-800 rounded-full flex items-center justify-center mx-auto mb-4">
-                    <Trophy className="w-8 h-8 text-gray-400" />
-                  </div>
-                  <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-2">
-                    No Past Contests
-                  </h3>
-                  <p className="text-gray-600 dark:text-gray-300">
-                    Past contest results will appear here after contests conclude.
-                  </p>
-                </CardContent>
-              </Card>
-            )}
-          </div>
-        </TabsContent>
-      </Tabs>
-
-      {/* Contest Stats */}
-      {allContests?.length ? (
-        <div className="mt-8 grid grid-cols-1 md:grid-cols-3 gap-6">
-          <Card>
-            <CardHeader className="pb-3">
-              <CardTitle className="text-sm font-medium text-gray-600 dark:text-gray-400">
-                Total Contests
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold text-gray-900 dark:text-white">
-                {allContests.length}
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader className="pb-3">
-              <CardTitle className="text-sm font-medium text-gray-600 dark:text-gray-400">
-                Active Participants
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold text-gray-900 dark:text-white">
-                {allContests.reduce((total, contest) => 
-                  total + (contest.participants?.length || 0), 0
-                )}
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader className="pb-3">
-              <CardTitle className="text-sm font-medium text-gray-600 dark:text-gray-400">
-                Prize Pool Total
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold text-gray-900 dark:text-white">
-                {allContests.filter(c => c.prizePool).length > 0 ? "Active" : "No prizes"}
-              </div>
-            </CardContent>
-          </Card>
-        </div>
-      ) : null}
     </div>
   );
 }
