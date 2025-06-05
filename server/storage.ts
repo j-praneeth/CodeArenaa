@@ -1,52 +1,171 @@
-import {
-  users,
-  problems,
-  submissions,
-  contests,
-  courses,
-  userProgress,
-  assignments,
-  groups,
-  contestParticipants,
-  announcements,
-  type User,
-  type UpsertUser,
-  type Problem,
-  type InsertProblem,
-  type Submission,
-  type InsertSubmission,
-  type Contest,
-  type InsertContest,
-  type Course,
-  type InsertCourse,
-  type UserProgress,
-  type InsertUserProgress,
-  type Assignment,
-  type InsertAssignment,
-  type Group,
-  type InsertGroup,
-  type ContestParticipant,
-  type InsertContestParticipant,
-  type Announcement,
-  type InsertAnnouncement,
-} from "@shared/schema";
-import { db } from "./db";
-import { eq, desc, asc, and, sql, inArray } from "drizzle-orm";
 
-// Interface for storage operations
+import { ObjectId, Collection } from 'mongodb';
+import { getDb } from './db';
+
+// MongoDB document interfaces
+export interface User {
+  _id?: ObjectId;
+  id: string;
+  email?: string;
+  firstName?: string;
+  lastName?: string;
+  profileImageUrl?: string;
+  role: string;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export interface Problem {
+  _id?: ObjectId;
+  id: number;
+  title: string;
+  description: string;
+  difficulty: string;
+  tags?: string[];
+  constraints?: string;
+  examples?: any;
+  testCases?: any;
+  timeLimit?: number;
+  memoryLimit?: number;
+  starterCode?: any;
+  isPublic: boolean;
+  createdBy?: string;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export interface Submission {
+  _id?: ObjectId;
+  id: number;
+  problemId: number;
+  userId: string;
+  code: string;
+  language: string;
+  status: string;
+  runtime?: number;
+  memory?: number;
+  score?: string;
+  feedback?: string;
+  submittedAt: Date;
+}
+
+export interface Contest {
+  _id?: ObjectId;
+  id: number;
+  title: string;
+  description?: string;
+  startTime: Date;
+  endTime: Date;
+  problems?: number[];
+  participants?: string[];
+  isPublic: boolean;
+  prizePool?: string;
+  createdBy?: string;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export interface Course {
+  _id?: ObjectId;
+  id: number;
+  title: string;
+  description?: string;
+  problems?: number[];
+  enrolledUsers?: string[];
+  isPublic: boolean;
+  createdBy?: string;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export interface UserProgress {
+  _id?: ObjectId;
+  id: number;
+  userId: string;
+  problemId: number;
+  status: string;
+  bestScore?: string;
+  attempts: number;
+  lastAttempt?: Date;
+  solvedAt?: Date;
+}
+
+export interface Assignment {
+  _id?: ObjectId;
+  id: number;
+  title: string;
+  description?: string;
+  problems?: number[];
+  assignedTo?: string[];
+  assignmentType: string;
+  dueDate?: Date;
+  maxAttempts: number;
+  isVisible: boolean;
+  autoGrade: boolean;
+  createdBy?: string;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export interface Group {
+  _id?: ObjectId;
+  id: number;
+  name: string;
+  description?: string;
+  members?: string[];
+  instructors?: string[];
+  courseId?: number;
+  createdBy?: string;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export interface ContestParticipant {
+  _id?: ObjectId;
+  id: number;
+  contestId: number;
+  userId: string;
+  registeredAt: Date;
+  score: string;
+  rank?: number;
+  submissions: number;
+  lastSubmission?: Date;
+}
+
+export interface Announcement {
+  _id?: ObjectId;
+  id: number;
+  title: string;
+  content: string;
+  type: string;
+  targetAudience?: string[];
+  isVisible: boolean;
+  priority: string;
+  createdBy?: string;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+// Types for inserts
+export type UpsertUser = Omit<User, '_id' | 'createdAt' | 'updatedAt'>;
+export type InsertProblem = Omit<Problem, '_id' | 'id' | 'createdAt' | 'updatedAt'>;
+export type InsertSubmission = Omit<Submission, '_id' | 'id' | 'submittedAt'>;
+export type InsertContest = Omit<Contest, '_id' | 'id' | 'createdAt' | 'updatedAt'>;
+export type InsertCourse = Omit<Course, '_id' | 'id' | 'createdAt' | 'updatedAt'>;
+export type InsertUserProgress = Omit<UserProgress, '_id' | 'id'>;
+export type InsertAssignment = Omit<Assignment, '_id' | 'id' | 'createdAt' | 'updatedAt'>;
+export type InsertGroup = Omit<Group, '_id' | 'id' | 'createdAt' | 'updatedAt'>;
+export type InsertContestParticipant = Omit<ContestParticipant, '_id' | 'id' | 'registeredAt'>;
+export type InsertAnnouncement = Omit<Announcement, '_id' | 'id' | 'createdAt' | 'updatedAt'>;
+
 export interface IStorage {
-  // User operations (IMPORTANT) these user operations are mandatory for Replit Auth.
   getUser(id: string): Promise<User | undefined>;
   upsertUser(user: UpsertUser): Promise<User>;
-  
-  // Problem operations
   getProblems(): Promise<Problem[]>;
   getProblem(id: number): Promise<Problem | undefined>;
   createProblem(problem: InsertProblem): Promise<Problem>;
   updateProblem(id: number, problem: Partial<InsertProblem>): Promise<Problem>;
   deleteProblem(id: number): Promise<void>;
-  
-  // Submission operations
   getSubmissions(userId?: string, problemId?: number): Promise<Submission[]>;
   getSubmission(id: number): Promise<Submission | undefined>;
   createSubmission(submission: InsertSubmission): Promise<Submission>;
@@ -55,62 +174,44 @@ export interface IStorage {
     accepted: number;
     streak: number;
   }>;
-  
-  // Contest operations
   getContests(): Promise<Contest[]>;
   getContest(id: number): Promise<Contest | undefined>;
   createContest(contest: InsertContest): Promise<Contest>;
   updateContest(id: number, contest: Partial<InsertContest>): Promise<Contest>;
   deleteContest(id: number): Promise<void>;
-  
-  // Course operations
   getCourses(): Promise<Course[]>;
   getCourse(id: number): Promise<Course | undefined>;
   createCourse(course: InsertCourse): Promise<Course>;
   updateCourse(id: number, course: Partial<InsertCourse>): Promise<Course>;
   deleteCourse(id: number): Promise<void>;
-  
-  // User progress operations
   getUserProgress(userId: string): Promise<UserProgress[]>;
   updateUserProgress(progress: InsertUserProgress): Promise<UserProgress>;
-  
-  // Leaderboard operations
   getLeaderboard(limit?: number): Promise<Array<{
     user: User;
     problemsSolved: number;
     totalScore: number;
   }>>;
-  
-  // Assignment operations
   getAssignments(): Promise<Assignment[]>;
   getAssignment(id: number): Promise<Assignment | undefined>;
   createAssignment(assignment: InsertAssignment): Promise<Assignment>;
   updateAssignment(id: number, assignment: Partial<InsertAssignment>): Promise<Assignment>;
   deleteAssignment(id: number): Promise<void>;
   getUserAssignments(userId: string): Promise<Assignment[]>;
-  
-  // Group operations
   getGroups(): Promise<Group[]>;
   getGroup(id: number): Promise<Group | undefined>;
   createGroup(group: InsertGroup): Promise<Group>;
   updateGroup(id: number, group: Partial<InsertGroup>): Promise<Group>;
   deleteGroup(id: number): Promise<void>;
   getUserGroups(userId: string): Promise<Group[]>;
-  
-  // Contest participant operations
   getContestParticipants(contestId: number): Promise<ContestParticipant[]>;
   registerForContest(data: InsertContestParticipant): Promise<ContestParticipant>;
   updateContestParticipant(contestId: number, userId: string, data: Partial<InsertContestParticipant>): Promise<ContestParticipant>;
-  
-  // Announcement operations
   getAnnouncements(): Promise<Announcement[]>;
   getAnnouncement(id: number): Promise<Announcement | undefined>;
   createAnnouncement(announcement: InsertAnnouncement): Promise<Announcement>;
   updateAnnouncement(id: number, announcement: Partial<InsertAnnouncement>): Promise<Announcement>;
   deleteAnnouncement(id: number): Promise<void>;
   getUserAnnouncements(userId: string): Promise<Announcement[]>;
-  
-  // Admin analytics operations
   getAdminAnalytics(): Promise<{
     totalUsers: number;
     totalProblems: number;
@@ -122,85 +223,131 @@ export interface IStorage {
   updateUserRole(userId: string, role: string): Promise<User>;
 }
 
-export class DatabaseStorage implements IStorage {
-  // User operations (IMPORTANT) these user operations are mandatory for Replit Auth.
+export class MongoStorage implements IStorage {
+  private async getNextId(collection: string): Promise<number> {
+    const db = getDb();
+    const counters = db.collection('counters');
+    const result = await counters.findOneAndUpdate(
+      { _id: collection },
+      { $inc: { seq: 1 } },
+      { upsert: true, returnDocument: 'after' }
+    );
+    return result.seq;
+  }
+
   async getUser(id: string): Promise<User | undefined> {
-    const [user] = await db.select().from(users).where(eq(users.id, id));
-    return user;
+    const db = getDb();
+    const users = db.collection<User>('users');
+    const user = await users.findOne({ id });
+    return user || undefined;
   }
 
   async upsertUser(userData: UpsertUser): Promise<User> {
-    const [user] = await db
-      .insert(users)
-      .values(userData)
-      .onConflictDoUpdate({
-        target: users.id,
-        set: {
+    const db = getDb();
+    const users = db.collection<User>('users');
+    const now = new Date();
+    
+    const user = await users.findOneAndUpdate(
+      { id: userData.id },
+      {
+        $set: {
           ...userData,
-          updatedAt: new Date(),
+          updatedAt: now,
         },
-      })
-      .returning();
-    return user;
+        $setOnInsert: {
+          createdAt: now,
+        },
+      },
+      { upsert: true, returnDocument: 'after' }
+    );
+    return user!;
   }
-  
-  // Problem operations
+
   async getProblems(): Promise<Problem[]> {
-    return await db.select().from(problems).where(eq(problems.isPublic, true)).orderBy(asc(problems.id));
+    const db = getDb();
+    const problems = db.collection<Problem>('problems');
+    return await problems.find({ isPublic: true }).sort({ id: 1 }).toArray();
   }
-  
+
   async getProblem(id: number): Promise<Problem | undefined> {
-    const [problem] = await db.select().from(problems).where(eq(problems.id, id));
-    return problem;
+    const db = getDb();
+    const problems = db.collection<Problem>('problems');
+    const problem = await problems.findOne({ id });
+    return problem || undefined;
   }
-  
+
   async createProblem(problem: InsertProblem): Promise<Problem> {
-    const [newProblem] = await db.insert(problems).values(problem).returning();
+    const db = getDb();
+    const problems = db.collection<Problem>('problems');
+    const now = new Date();
+    const id = await this.getNextId('problems');
+    
+    const newProblem: Problem = {
+      ...problem,
+      id,
+      createdAt: now,
+      updatedAt: now,
+    };
+    
+    await problems.insertOne(newProblem);
     return newProblem;
   }
-  
+
   async updateProblem(id: number, problem: Partial<InsertProblem>): Promise<Problem> {
-    const [updatedProblem] = await db
-      .update(problems)
-      .set({ ...problem, updatedAt: new Date() })
-      .where(eq(problems.id, id))
-      .returning();
-    return updatedProblem;
+    const db = getDb();
+    const problems = db.collection<Problem>('problems');
+    
+    const updatedProblem = await problems.findOneAndUpdate(
+      { id },
+      { $set: { ...problem, updatedAt: new Date() } },
+      { returnDocument: 'after' }
+    );
+    return updatedProblem!;
   }
-  
+
   async deleteProblem(id: number): Promise<void> {
-    await db.delete(problems).where(eq(problems.id, id));
+    const db = getDb();
+    const problems = db.collection<Problem>('problems');
+    await problems.deleteOne({ id });
   }
-  
-  // Submission operations
+
   async getSubmissions(userId?: string, problemId?: number): Promise<Submission[]> {
-    let baseQuery = db.select().from(submissions);
+    const db = getDb();
+    const submissions = db.collection<Submission>('submissions');
+    const filter: any = {};
     
-    if (userId && problemId) {
-      return await baseQuery.where(and(eq(submissions.userId, userId), eq(submissions.problemId, problemId))).orderBy(desc(submissions.submittedAt));
-    } else if (userId) {
-      return await baseQuery.where(eq(submissions.userId, userId)).orderBy(desc(submissions.submittedAt));
-    } else if (problemId) {
-      return await baseQuery.where(eq(submissions.problemId, problemId)).orderBy(desc(submissions.submittedAt));
-    }
+    if (userId) filter.userId = userId;
+    if (problemId) filter.problemId = problemId;
     
-    return await baseQuery.orderBy(desc(submissions.submittedAt));
+    return await submissions.find(filter).sort({ submittedAt: -1 }).toArray();
   }
-  
+
   async getSubmission(id: number): Promise<Submission | undefined> {
-    const [submission] = await db.select().from(submissions).where(eq(submissions.id, id));
-    return submission;
+    const db = getDb();
+    const submissions = db.collection<Submission>('submissions');
+    const submission = await submissions.findOne({ id });
+    return submission || undefined;
   }
-  
+
   async createSubmission(submission: InsertSubmission): Promise<Submission> {
-    const [newSubmission] = await db.insert(submissions).values(submission).returning();
+    const db = getDb();
+    const submissions = db.collection<Submission>('submissions');
+    const id = await this.getNextId('submissions');
+    
+    const newSubmission: Submission = {
+      ...submission,
+      id,
+      submittedAt: new Date(),
+    };
+    
+    await submissions.insertOne(newSubmission);
     
     // Update user progress
     await this.updateUserProgress({
       userId: submission.userId,
       problemId: submission.problemId,
       status: submission.status === 'accepted' ? 'solved' : 'in_progress',
-      bestScore: submission.score ? submission.score : undefined,
+      bestScore: submission.score || undefined,
       attempts: 1,
       lastAttempt: new Date(),
       solvedAt: submission.status === 'accepted' ? new Date() : undefined,
@@ -208,18 +355,16 @@ export class DatabaseStorage implements IStorage {
     
     return newSubmission;
   }
-  
+
   async getUserSubmissionStats(userId: string): Promise<{
     total: number;
     accepted: number;
     streak: number;
   }> {
-    const userSubmissions = await db
-      .select()
-      .from(submissions)
-      .where(eq(submissions.userId, userId))
-      .orderBy(desc(submissions.submittedAt));
+    const db = getDb();
+    const submissions = db.collection<Submission>('submissions');
     
+    const userSubmissions = await submissions.find({ userId }).sort({ submittedAt: -1 }).toArray();
     const total = userSubmissions.length;
     const accepted = userSubmissions.filter(s => s.status === 'accepted').length;
     
@@ -228,7 +373,7 @@ export class DatabaseStorage implements IStorage {
     const today = new Date();
     const oneDayMs = 24 * 60 * 60 * 1000;
     
-    for (let i = 0; i < 30; i++) { // Check last 30 days
+    for (let i = 0; i < 30; i++) {
       const checkDate = new Date(today.getTime() - i * oneDayMs);
       const hasSubmission = userSubmissions.some(s => {
         const submissionDate = new Date(s.submittedAt!);
@@ -237,266 +382,390 @@ export class DatabaseStorage implements IStorage {
       
       if (hasSubmission) {
         streak++;
-      } else if (i > 0) { // Don't break on first day if no submission today
+      } else if (i > 0) {
         break;
       }
     }
     
     return { total, accepted, streak };
   }
-  
-  // Contest operations
+
   async getContests(): Promise<Contest[]> {
-    return await db.select().from(contests).where(eq(contests.isPublic, true)).orderBy(asc(contests.startTime));
+    const db = getDb();
+    const contests = db.collection<Contest>('contests');
+    return await contests.find({ isPublic: true }).sort({ startTime: 1 }).toArray();
   }
-  
+
   async getContest(id: number): Promise<Contest | undefined> {
-    const [contest] = await db.select().from(contests).where(eq(contests.id, id));
-    return contest;
+    const db = getDb();
+    const contests = db.collection<Contest>('contests');
+    const contest = await contests.findOne({ id });
+    return contest || undefined;
   }
-  
+
   async createContest(contest: InsertContest): Promise<Contest> {
-    const [newContest] = await db.insert(contests).values(contest).returning();
+    const db = getDb();
+    const contests = db.collection<Contest>('contests');
+    const now = new Date();
+    const id = await this.getNextId('contests');
+    
+    const newContest: Contest = {
+      ...contest,
+      id,
+      createdAt: now,
+      updatedAt: now,
+    };
+    
+    await contests.insertOne(newContest);
     return newContest;
   }
-  
+
   async updateContest(id: number, contest: Partial<InsertContest>): Promise<Contest> {
-    const [updatedContest] = await db
-      .update(contests)
-      .set({ ...contest, updatedAt: new Date() })
-      .where(eq(contests.id, id))
-      .returning();
-    return updatedContest;
+    const db = getDb();
+    const contests = db.collection<Contest>('contests');
+    
+    const updatedContest = await contests.findOneAndUpdate(
+      { id },
+      { $set: { ...contest, updatedAt: new Date() } },
+      { returnDocument: 'after' }
+    );
+    return updatedContest!;
   }
-  
+
   async deleteContest(id: number): Promise<void> {
-    await db.delete(contests).where(eq(contests.id, id));
+    const db = getDb();
+    const contests = db.collection<Contest>('contests');
+    await contests.deleteOne({ id });
   }
-  
-  // Course operations
+
   async getCourses(): Promise<Course[]> {
-    return await db.select().from(courses).where(eq(courses.isPublic, true)).orderBy(asc(courses.id));
+    const db = getDb();
+    const courses = db.collection<Course>('courses');
+    return await courses.find({ isPublic: true }).sort({ id: 1 }).toArray();
   }
-  
+
   async getCourse(id: number): Promise<Course | undefined> {
-    const [course] = await db.select().from(courses).where(eq(courses.id, id));
-    return course;
+    const db = getDb();
+    const courses = db.collection<Course>('courses');
+    const course = await courses.findOne({ id });
+    return course || undefined;
   }
-  
+
   async createCourse(course: InsertCourse): Promise<Course> {
-    const [newCourse] = await db.insert(courses).values(course).returning();
+    const db = getDb();
+    const courses = db.collection<Course>('courses');
+    const now = new Date();
+    const id = await this.getNextId('courses');
+    
+    const newCourse: Course = {
+      ...course,
+      id,
+      createdAt: now,
+      updatedAt: now,
+    };
+    
+    await courses.insertOne(newCourse);
     return newCourse;
   }
-  
+
   async updateCourse(id: number, course: Partial<InsertCourse>): Promise<Course> {
-    const [updatedCourse] = await db
-      .update(courses)
-      .set({ ...course, updatedAt: new Date() })
-      .where(eq(courses.id, id))
-      .returning();
-    return updatedCourse;
-  }
-  
-  async deleteCourse(id: number): Promise<void> {
-    await db.delete(courses).where(eq(courses.id, id));
-  }
-  
-  // User progress operations
-  async getUserProgress(userId: string): Promise<UserProgress[]> {
-    return await db.select().from(userProgress).where(eq(userProgress.userId, userId));
-  }
-  
-  async updateUserProgress(progress: InsertUserProgress): Promise<UserProgress> {
-    const existing = await db
-      .select()
-      .from(userProgress)
-      .where(and(
-        eq(userProgress.userId, progress.userId),
-        eq(userProgress.problemId, progress.problemId)
-      ));
+    const db = getDb();
+    const courses = db.collection<Course>('courses');
     
-    if (existing.length > 0) {
-      const [updated] = await db
-        .update(userProgress)
-        .set({
-          ...progress,
-          attempts: sql`${userProgress.attempts} + 1`,
-        })
-        .where(and(
-          eq(userProgress.userId, progress.userId),
-          eq(userProgress.problemId, progress.problemId)
-        ))
-        .returning();
-      return updated;
+    const updatedCourse = await courses.findOneAndUpdate(
+      { id },
+      { $set: { ...course, updatedAt: new Date() } },
+      { returnDocument: 'after' }
+    );
+    return updatedCourse!;
+  }
+
+  async deleteCourse(id: number): Promise<void> {
+    const db = getDb();
+    const courses = db.collection<Course>('courses');
+    await courses.deleteOne({ id });
+  }
+
+  async getUserProgress(userId: string): Promise<UserProgress[]> {
+    const db = getDb();
+    const userProgress = db.collection<UserProgress>('userProgress');
+    return await userProgress.find({ userId }).toArray();
+  }
+
+  async updateUserProgress(progress: InsertUserProgress): Promise<UserProgress> {
+    const db = getDb();
+    const userProgress = db.collection<UserProgress>('userProgress');
+    
+    const existing = await userProgress.findOne({
+      userId: progress.userId,
+      problemId: progress.problemId
+    });
+    
+    if (existing) {
+      const updated = await userProgress.findOneAndUpdate(
+        { userId: progress.userId, problemId: progress.problemId },
+        {
+          $set: progress,
+          $inc: { attempts: 1 }
+        },
+        { returnDocument: 'after' }
+      );
+      return updated!;
     } else {
-      const [newProgress] = await db.insert(userProgress).values(progress).returning();
+      const id = await this.getNextId('userProgress');
+      const newProgress: UserProgress = { ...progress, id };
+      await userProgress.insertOne(newProgress);
       return newProgress;
     }
   }
-  
-  // Leaderboard operations
+
   async getLeaderboard(limit: number = 10): Promise<Array<{
     user: User;
     problemsSolved: number;
     totalScore: number;
   }>> {
-    const result = await db
-      .select({
-        user: users,
-        problemsSolved: sql<number>`count(distinct ${userProgress.problemId})`.as('problems_solved'),
-        totalScore: sql<number>`coalesce(sum(${userProgress.bestScore}), 0)`.as('total_score'),
-      })
-      .from(users)
-      .leftJoin(userProgress, and(
-        eq(users.id, userProgress.userId),
-        eq(userProgress.status, 'solved')
-      ))
-      .groupBy(users.id)
-      .orderBy(desc(sql`problems_solved`), desc(sql`total_score`))
-      .limit(limit);
+    const db = getDb();
+    const users = db.collection<User>('users');
+    const userProgress = db.collection<UserProgress>('userProgress');
     
-    return result.map(row => ({
-      user: row.user,
-      problemsSolved: row.problemsSolved,
-      totalScore: row.totalScore,
-    }));
+    const pipeline = [
+      { $match: { status: 'solved' } },
+      {
+        $group: {
+          _id: '$userId',
+          problemsSolved: { $sum: 1 },
+          totalScore: { $sum: { $toDouble: { $ifNull: ['$bestScore', '0'] } } }
+        }
+      },
+      { $sort: { problemsSolved: -1, totalScore: -1 } },
+      { $limit: limit }
+    ];
+    
+    const leaderboardData = await userProgress.aggregate(pipeline).toArray();
+    const result = [];
+    
+    for (const entry of leaderboardData) {
+      const user = await users.findOne({ id: entry._id });
+      if (user) {
+        result.push({
+          user,
+          problemsSolved: entry.problemsSolved,
+          totalScore: entry.totalScore
+        });
+      }
+    }
+    
+    return result;
   }
-  
-  // Assignment operations
+
   async getAssignments(): Promise<Assignment[]> {
-    return await db.select().from(assignments).orderBy(desc(assignments.createdAt));
+    const db = getDb();
+    const assignments = db.collection<Assignment>('assignments');
+    return await assignments.find().sort({ createdAt: -1 }).toArray();
   }
-  
+
   async getAssignment(id: number): Promise<Assignment | undefined> {
-    const [assignment] = await db.select().from(assignments).where(eq(assignments.id, id));
-    return assignment;
+    const db = getDb();
+    const assignments = db.collection<Assignment>('assignments');
+    const assignment = await assignments.findOne({ id });
+    return assignment || undefined;
   }
-  
+
   async createAssignment(assignment: InsertAssignment): Promise<Assignment> {
-    const [newAssignment] = await db.insert(assignments).values(assignment).returning();
+    const db = getDb();
+    const assignments = db.collection<Assignment>('assignments');
+    const now = new Date();
+    const id = await this.getNextId('assignments');
+    
+    const newAssignment: Assignment = {
+      ...assignment,
+      id,
+      createdAt: now,
+      updatedAt: now,
+    };
+    
+    await assignments.insertOne(newAssignment);
     return newAssignment;
   }
-  
+
   async updateAssignment(id: number, assignment: Partial<InsertAssignment>): Promise<Assignment> {
-    const [updatedAssignment] = await db
-      .update(assignments)
-      .set({ ...assignment, updatedAt: new Date() })
-      .where(eq(assignments.id, id))
-      .returning();
-    return updatedAssignment;
+    const db = getDb();
+    const assignments = db.collection<Assignment>('assignments');
+    
+    const updatedAssignment = await assignments.findOneAndUpdate(
+      { id },
+      { $set: { ...assignment, updatedAt: new Date() } },
+      { returnDocument: 'after' }
+    );
+    return updatedAssignment!;
   }
-  
+
   async deleteAssignment(id: number): Promise<void> {
-    await db.delete(assignments).where(eq(assignments.id, id));
+    const db = getDb();
+    const assignments = db.collection<Assignment>('assignments');
+    await assignments.deleteOne({ id });
   }
-  
+
   async getUserAssignments(userId: string): Promise<Assignment[]> {
-    return await db
-      .select()
-      .from(assignments)
-      .where(sql`${userId} = ANY(${assignments.assignedTo})`)
-      .orderBy(desc(assignments.createdAt));
+    const db = getDb();
+    const assignments = db.collection<Assignment>('assignments');
+    return await assignments.find({ assignedTo: { $in: [userId] } }).sort({ createdAt: -1 }).toArray();
   }
-  
-  // Group operations
+
   async getGroups(): Promise<Group[]> {
-    return await db.select().from(groups).orderBy(desc(groups.createdAt));
+    const db = getDb();
+    const groups = db.collection<Group>('groups');
+    return await groups.find().sort({ createdAt: -1 }).toArray();
   }
-  
+
   async getGroup(id: number): Promise<Group | undefined> {
-    const [group] = await db.select().from(groups).where(eq(groups.id, id));
-    return group;
+    const db = getDb();
+    const groups = db.collection<Group>('groups');
+    const group = await groups.findOne({ id });
+    return group || undefined;
   }
-  
+
   async createGroup(group: InsertGroup): Promise<Group> {
-    const [newGroup] = await db.insert(groups).values(group).returning();
+    const db = getDb();
+    const groups = db.collection<Group>('groups');
+    const now = new Date();
+    const id = await this.getNextId('groups');
+    
+    const newGroup: Group = {
+      ...group,
+      id,
+      createdAt: now,
+      updatedAt: now,
+    };
+    
+    await groups.insertOne(newGroup);
     return newGroup;
   }
-  
+
   async updateGroup(id: number, group: Partial<InsertGroup>): Promise<Group> {
-    const [updatedGroup] = await db
-      .update(groups)
-      .set({ ...group, updatedAt: new Date() })
-      .where(eq(groups.id, id))
-      .returning();
-    return updatedGroup;
+    const db = getDb();
+    const groups = db.collection<Group>('groups');
+    
+    const updatedGroup = await groups.findOneAndUpdate(
+      { id },
+      { $set: { ...group, updatedAt: new Date() } },
+      { returnDocument: 'after' }
+    );
+    return updatedGroup!;
   }
-  
+
   async deleteGroup(id: number): Promise<void> {
-    await db.delete(groups).where(eq(groups.id, id));
+    const db = getDb();
+    const groups = db.collection<Group>('groups');
+    await groups.deleteOne({ id });
   }
-  
+
   async getUserGroups(userId: string): Promise<Group[]> {
-    return await db
-      .select()
-      .from(groups)
-      .where(sql`${userId} = ANY(${groups.members}) OR ${userId} = ANY(${groups.instructors})`)
-      .orderBy(desc(groups.createdAt));
+    const db = getDb();
+    const groups = db.collection<Group>('groups');
+    return await groups.find({
+      $or: [
+        { members: { $in: [userId] } },
+        { instructors: { $in: [userId] } }
+      ]
+    }).sort({ createdAt: -1 }).toArray();
   }
-  
-  // Contest participant operations
+
   async getContestParticipants(contestId: number): Promise<ContestParticipant[]> {
-    return await db
-      .select()
-      .from(contestParticipants)
-      .where(eq(contestParticipants.contestId, contestId))
-      .orderBy(asc(contestParticipants.rank));
+    const db = getDb();
+    const participants = db.collection<ContestParticipant>('contestParticipants');
+    return await participants.find({ contestId }).sort({ rank: 1 }).toArray();
   }
-  
+
   async registerForContest(data: InsertContestParticipant): Promise<ContestParticipant> {
-    const [participant] = await db.insert(contestParticipants).values(data).returning();
+    const db = getDb();
+    const participants = db.collection<ContestParticipant>('contestParticipants');
+    const id = await this.getNextId('contestParticipants');
+    
+    const participant: ContestParticipant = {
+      ...data,
+      id,
+      registeredAt: new Date(),
+      score: "0",
+      submissions: 0,
+    };
+    
+    await participants.insertOne(participant);
     return participant;
   }
-  
+
   async updateContestParticipant(contestId: number, userId: string, data: Partial<InsertContestParticipant>): Promise<ContestParticipant> {
-    const [updated] = await db
-      .update(contestParticipants)
-      .set(data)
-      .where(and(eq(contestParticipants.contestId, contestId), eq(contestParticipants.userId, userId)))
-      .returning();
-    return updated;
+    const db = getDb();
+    const participants = db.collection<ContestParticipant>('contestParticipants');
+    
+    const updated = await participants.findOneAndUpdate(
+      { contestId, userId },
+      { $set: data },
+      { returnDocument: 'after' }
+    );
+    return updated!;
   }
-  
-  // Announcement operations
+
   async getAnnouncements(): Promise<Announcement[]> {
-    return await db.select().from(announcements).where(eq(announcements.isVisible, true)).orderBy(desc(announcements.createdAt));
+    const db = getDb();
+    const announcements = db.collection<Announcement>('announcements');
+    return await announcements.find({ isVisible: true }).sort({ createdAt: -1 }).toArray();
   }
-  
+
   async getAnnouncement(id: number): Promise<Announcement | undefined> {
-    const [announcement] = await db.select().from(announcements).where(eq(announcements.id, id));
-    return announcement;
+    const db = getDb();
+    const announcements = db.collection<Announcement>('announcements');
+    const announcement = await announcements.findOne({ id });
+    return announcement || undefined;
   }
-  
+
   async createAnnouncement(announcement: InsertAnnouncement): Promise<Announcement> {
-    const [newAnnouncement] = await db.insert(announcements).values(announcement).returning();
+    const db = getDb();
+    const announcements = db.collection<Announcement>('announcements');
+    const now = new Date();
+    const id = await this.getNextId('announcements');
+    
+    const newAnnouncement: Announcement = {
+      ...announcement,
+      id,
+      createdAt: now,
+      updatedAt: now,
+    };
+    
+    await announcements.insertOne(newAnnouncement);
     return newAnnouncement;
   }
-  
+
   async updateAnnouncement(id: number, announcement: Partial<InsertAnnouncement>): Promise<Announcement> {
-    const [updatedAnnouncement] = await db
-      .update(announcements)
-      .set({ ...announcement, updatedAt: new Date() })
-      .where(eq(announcements.id, id))
-      .returning();
-    return updatedAnnouncement;
+    const db = getDb();
+    const announcements = db.collection<Announcement>('announcements');
+    
+    const updatedAnnouncement = await announcements.findOneAndUpdate(
+      { id },
+      { $set: { ...announcement, updatedAt: new Date() } },
+      { returnDocument: 'after' }
+    );
+    return updatedAnnouncement!;
   }
-  
+
   async deleteAnnouncement(id: number): Promise<void> {
-    await db.delete(announcements).where(eq(announcements.id, id));
+    const db = getDb();
+    const announcements = db.collection<Announcement>('announcements');
+    await announcements.deleteOne({ id });
   }
-  
+
   async getUserAnnouncements(userId: string): Promise<Announcement[]> {
-    return await db
-      .select()
-      .from(announcements)
-      .where(and(
-        eq(announcements.isVisible, true),
-        sql`'all' = ANY(${announcements.targetAudience}) OR ${userId} = ANY(${announcements.targetAudience})`
-      ))
-      .orderBy(desc(announcements.createdAt));
+    const db = getDb();
+    const announcements = db.collection<Announcement>('announcements');
+    return await announcements.find({
+      isVisible: true,
+      $or: [
+        { targetAudience: { $in: ['all'] } },
+        { targetAudience: { $in: [userId] } }
+      ]
+    }).sort({ createdAt: -1 }).toArray();
   }
-  
-  // Admin analytics operations
+
   async getAdminAnalytics(): Promise<{
     totalUsers: number;
     totalProblems: number;
@@ -504,44 +773,53 @@ export class DatabaseStorage implements IStorage {
     activeContests: number;
     recentActivity: any[];
   }> {
-    const [userCount] = await db.select({ count: sql<number>`count(*)` }).from(users);
-    const [problemCount] = await db.select({ count: sql<number>`count(*)` }).from(problems);
-    const [submissionCount] = await db.select({ count: sql<number>`count(*)` }).from(submissions);
-    const [activeContestCount] = await db
-      .select({ count: sql<number>`count(*)` })
-      .from(contests)
-      .where(and(
-        sql`${contests.startTime} <= NOW()`,
-        sql`${contests.endTime} >= NOW()`
-      ));
+    const db = getDb();
+    const users = db.collection<User>('users');
+    const problems = db.collection<Problem>('problems');
+    const submissions = db.collection<Submission>('submissions');
+    const contests = db.collection<Contest>('contests');
     
-    const recentSubmissions = await db
-      .select()
-      .from(submissions)
-      .orderBy(desc(submissions.submittedAt))
-      .limit(10);
+    const totalUsers = await users.countDocuments();
+    const totalProblems = await problems.countDocuments();
+    const totalSubmissions = await submissions.countDocuments();
+    
+    const now = new Date();
+    const activeContests = await contests.countDocuments({
+      startTime: { $lte: now },
+      endTime: { $gte: now }
+    });
+    
+    const recentActivity = await submissions.find()
+      .sort({ submittedAt: -1 })
+      .limit(10)
+      .toArray();
     
     return {
-      totalUsers: userCount.count,
-      totalProblems: problemCount.count,
-      totalSubmissions: submissionCount.count,
-      activeContests: activeContestCount.count,
-      recentActivity: recentSubmissions,
+      totalUsers,
+      totalProblems,
+      totalSubmissions,
+      activeContests,
+      recentActivity,
     };
   }
-  
+
   async getAllUsers(): Promise<User[]> {
-    return await db.select().from(users).orderBy(desc(users.createdAt));
+    const db = getDb();
+    const users = db.collection<User>('users');
+    return await users.find().sort({ createdAt: -1 }).toArray();
   }
-  
+
   async updateUserRole(userId: string, role: string): Promise<User> {
-    const [updatedUser] = await db
-      .update(users)
-      .set({ role, updatedAt: new Date() })
-      .where(eq(users.id, userId))
-      .returning();
-    return updatedUser;
+    const db = getDb();
+    const users = db.collection<User>('users');
+    
+    const updatedUser = await users.findOneAndUpdate(
+      { id: userId },
+      { $set: { role, updatedAt: new Date() } },
+      { returnDocument: 'after' }
+    );
+    return updatedUser!;
   }
 }
 
-export const storage = new DatabaseStorage();
+export const storage = new MongoStorage();

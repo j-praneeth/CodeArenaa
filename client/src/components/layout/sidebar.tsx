@@ -11,7 +11,7 @@ import { Progress } from "@/components/ui/progress";
 
 export function Sidebar() {
   const [location] = useLocation();
-  
+
   const { data: userStats } = useQuery({
     queryKey: ["/api/users/me/stats"],
   });
@@ -81,3 +81,6 @@ export function Sidebar() {
     </aside>
   );
 }
+
+export { Sidebar };
+export default Sidebar;
