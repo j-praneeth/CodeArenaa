@@ -13,14 +13,14 @@ import {
 } from "@shared/schema";
 import { z } from "zod";
 
-export async function registerRoutes(app: Express): Promise模Server> {
+export async function registerRoutes(app: Express): Promise<Server> {
   // Auth middleware
   await setupAuth(app);
 
   // Auth routes
   app.get('/api/auth/user', isAuthenticated, async (req: any, res) => {
     try {
-      const userId = req.user.sub;
+      const userId = req.user.claims.sub;
       const user = await storage.getUser(userId);
       res.json(user);
     } catch (error) {
@@ -56,9 +56,9 @@ export async function registerRoutes(app: Express): Promise模Server> {
 
   app.post('/api/problems', isAuthenticated, async (req: any, res) => {
     try {
-      const userId = req.user.sub;
+      const userId = req.user.claims.sub;
       const user = await storage.getUser(userId);
-
+      
       if (user?.role !== 'admin') {
         return res.status(403).json({ message: "Only admins can create problems" });
       }
@@ -67,7 +67,7 @@ export async function registerRoutes(app: Express): Promise模Server> {
         ...req.body,
         createdBy: userId,
       });
-
+      
       const problem = await storage.createProblem(validatedData);
       res.status(201).json(problem);
     } catch (error) {
@@ -82,9 +82,9 @@ export async function registerRoutes(app: Express): Promise模Server> {
   // Submission routes
   app.get('/api/submissions', isAuthenticated, async (req: any, res) => {
     try {
-      const userId = req.user.sub;
+      const userId = req.user.claims.sub;
       const problemId = req.query.problemId ? parseInt(req.query.problemId as string) : undefined;
-
+      
       const submissions = await storage.getSubmissions(userId, problemId);
       res.json(submissions);
     } catch (error) {
@@ -95,8 +95,8 @@ export async function registerRoutes(app: Express): Promise模Server> {
 
   app.post('/api/submissions', isAuthenticated, async (req: any, res) => {
     try {
-      const userId = req.user.sub;
-
+      const userId = req.user.claims.sub;
+      
       const validatedData = insertSubmissionSchema.parse({
         ...req.body,
         userId,
@@ -111,7 +111,7 @@ export async function registerRoutes(app: Express): Promise模Server> {
       validatedData.memory = mockResult.memory;
       validatedData.score = mockResult.score;
       validatedData.feedback = mockResult.feedback;
-
+      
       const submission = await storage.createSubmission(validatedData);
       res.status(201).json(submission);
     } catch (error) {
@@ -126,18 +126,18 @@ export async function registerRoutes(app: Express): Promise模Server> {
   // User stats route
   app.get('/api/users/:id/stats', isAuthenticated, async (req: any, res) => {
     try {
-      const userId = req.params.id === 'me' ? req.user.sub : req.params.id;
-      const currentUserId = req.user.sub;
-
+      const userId = req.params.id === 'me' ? req.user.claims.sub : req.params.id;
+      const currentUserId = req.user.claims.sub;
+      
       // Users can only view their own stats unless they're admin
       const currentUser = await storage.getUser(currentUserId);
       if (userId !== currentUserId && currentUser?.role !== 'admin') {
         return res.status(403).json({ message: "Unauthorized" });
       }
-
+      
       const stats = await storage.getUserSubmissionStats(userId);
       const progress = await storage.getUserProgress(userId);
-
+      
       res.json({ ...stats, progress });
     } catch (error) {
       console.error("Error fetching user stats:", error);
@@ -172,9 +172,9 @@ export async function registerRoutes(app: Express): Promise模Server> {
 
   app.post('/api/contests', isAuthenticated, async (req: any, res) => {
     try {
-      const userId = req.user.sub;
+      const userId = req.user.claims.sub;
       const user = await storage.getUser(userId);
-
+      
       if (user?.role !== 'admin') {
         return res.status(403).json({ message: "Only admins can create contests" });
       }
@@ -183,7 +183,7 @@ export async function registerRoutes(app: Express): Promise模Server> {
         ...req.body,
         createdBy: userId,
       });
-
+      
       const contest = await storage.createContest(validatedData);
       res.status(201).json(contest);
     } catch (error) {
@@ -222,9 +222,9 @@ export async function registerRoutes(app: Express): Promise模Server> {
 
   app.post('/api/courses', isAuthenticated, async (req: any, res) => {
     try {
-      const userId = req.user.sub;
+      const userId = req.user.claims.sub;
       const user = await storage.getUser(userId);
-
+      
       if (user?.role !== 'admin') {
         return res.status(403).json({ message: "Only admins can create courses" });
       }
@@ -233,7 +233,7 @@ export async function registerRoutes(app: Express): Promise模Server> {
         ...req.body,
         createdBy: userId,
       });
-
+      
       const course = await storage.createCourse(validatedData);
       res.status(201).json(course);
     } catch (error) {
@@ -260,7 +260,7 @@ export async function registerRoutes(app: Express): Promise模Server> {
   // Assignment routes
   app.get('/api/assignments', isAuthenticated, async (req: any, res) => {
     try {
-      const userId = req.user.sub;
+      const userId = req.user.claims.sub;
       const assignments = await storage.getUserAssignments(userId);
       res.json(assignments);
     } catch (error) {
@@ -285,9 +285,9 @@ export async function registerRoutes(app: Express): Promise模Server> {
 
   app.post('/api/assignments', isAuthenticated, async (req: any, res) => {
     try {
-      const userId = req.user.sub;
+      const userId = req.user.claims.sub;
       const user = await storage.getUser(userId);
-
+      
       if (user?.role !== 'admin') {
         return res.status(403).json({ message: "Only admins can create assignments" });
       }
@@ -296,7 +296,7 @@ export async function registerRoutes(app: Express): Promise模Server> {
         ...req.body,
         createdBy: userId,
       });
-
+      
       const assignment = await storage.createAssignment(validatedData);
       res.status(201).json(assignment);
     } catch (error) {
@@ -311,7 +311,7 @@ export async function registerRoutes(app: Express): Promise模Server> {
   // Group routes
   app.get('/api/groups', isAuthenticated, async (req: any, res) => {
     try {
-      const userId = req.user.sub;
+      const userId = req.user.claims.sub;
       const groups = await storage.getUserGroups(userId);
       res.json(groups);
     } catch (error) {
@@ -322,9 +322,9 @@ export async function registerRoutes(app: Express): Promise模Server> {
 
   app.post('/api/groups', isAuthenticated, async (req: any, res) => {
     try {
-      const userId = req.user.sub;
+      const userId = req.user.claims.sub;
       const user = await storage.getUser(userId);
-
+      
       if (user?.role !== 'admin') {
         return res.status(403).json({ message: "Only admins can create groups" });
       }
@@ -333,7 +333,7 @@ export async function registerRoutes(app: Express): Promise模Server> {
         ...req.body,
         createdBy: userId,
       });
-
+      
       const group = await storage.createGroup(validatedData);
       res.status(201).json(group);
     } catch (error) {
@@ -348,7 +348,7 @@ export async function registerRoutes(app: Express): Promise模Server> {
   // Announcement routes
   app.get('/api/announcements', isAuthenticated, async (req: any, res) => {
     try {
-      const userId = req.user.sub;
+      const userId = req.user.claims.sub;
       const announcements = await storage.getUserAnnouncements(userId);
       res.json(announcements);
     } catch (error) {
@@ -359,9 +359,9 @@ export async function registerRoutes(app: Express): Promise模Server> {
 
   app.post('/api/announcements', isAuthenticated, async (req: any, res) => {
     try {
-      const userId = req.user.sub;
+      const userId = req.user.claims.sub;
       const user = await storage.getUser(userId);
-
+      
       if (user?.role !== 'admin') {
         return res.status(403).json({ message: "Only admins can create announcements" });
       }
@@ -370,7 +370,7 @@ export async function registerRoutes(app: Express): Promise模Server> {
         ...req.body,
         createdBy: userId,
       });
-
+      
       const announcement = await storage.createAnnouncement(validatedData);
       res.status(201).json(announcement);
     } catch (error) {
@@ -386,13 +386,13 @@ export async function registerRoutes(app: Express): Promise模Server> {
   app.post('/api/contests/:id/register', isAuthenticated, async (req: any, res) => {
     try {
       const contestId = parseInt(req.params.id);
-      const userId = req.user.sub;
-
+      const userId = req.user.claims.sub;
+      
       const participant = await storage.registerForContest({
         contestId,
         userId,
       });
-
+      
       res.status(201).json(participant);
     } catch (error) {
       console.error("Error registering for contest:", error);
@@ -414,13 +414,13 @@ export async function registerRoutes(app: Express): Promise模Server> {
   // Admin routes
   app.get('/api/admin/analytics', isAuthenticated, async (req: any, res) => {
     try {
-      const userId = req.user.sub;
+      const userId = req.user.claims.sub;
       const user = await storage.getUser(userId);
-
+      
       if (user?.role !== 'admin') {
         return res.status(403).json({ message: "Admin access required" });
       }
-
+      
       const analytics = await storage.getAdminAnalytics();
       res.json(analytics);
     } catch (error) {
@@ -431,13 +431,13 @@ export async function registerRoutes(app: Express): Promise模Server> {
 
   app.get('/api/admin/users', isAuthenticated, async (req: any, res) => {
     try {
-      const userId = req.user.sub;
+      const userId = req.user.claims.sub;
       const user = await storage.getUser(userId);
-
+      
       if (user?.role !== 'admin') {
         return res.status(403).json({ message: "Admin access required" });
       }
-
+      
       const users = await storage.getAllUsers();
       res.json(users);
     } catch (error) {
@@ -448,20 +448,20 @@ export async function registerRoutes(app: Express): Promise模Server> {
 
   app.patch('/api/admin/users/:id/role', isAuthenticated, async (req: any, res) => {
     try {
-      const currentUserId = req.user.sub;
+      const currentUserId = req.user.claims.sub;
       const currentUser = await storage.getUser(currentUserId);
-
+      
       if (currentUser?.role !== 'admin') {
         return res.status(403).json({ message: "Admin access required" });
       }
-
+      
       const targetUserId = req.params.id;
       const { role } = req.body;
-
+      
       if (!['student', 'admin'].includes(role)) {
         return res.status(400).json({ message: "Invalid role" });
       }
-
+      
       const updatedUser = await storage.updateUserRole(targetUserId, role);
       res.json(updatedUser);
     } catch (error) {
@@ -472,13 +472,13 @@ export async function registerRoutes(app: Express): Promise模Server> {
 
   app.get('/api/admin/assignments', isAuthenticated, async (req: any, res) => {
     try {
-      const userId = req.user.sub;
+      const userId = req.user.claims.sub;
       const user = await storage.getUser(userId);
-
+      
       if (user?.role !== 'admin') {
         return res.status(403).json({ message: "Admin access required" });
       }
-
+      
       const assignments = await storage.getAssignments();
       res.json(assignments);
     } catch (error) {
@@ -489,13 +489,13 @@ export async function registerRoutes(app: Express): Promise模Server> {
 
   app.get('/api/admin/groups', isAuthenticated, async (req: any, res) => {
     try {
-      const userId = req.user.sub;
+      const userId = req.user.claims.sub;
       const user = await storage.getUser(userId);
-
+      
       if (user?.role !== 'admin') {
         return res.status(403).json({ message: "Admin access required" });
       }
-
+      
       const groups = await storage.getGroups();
       res.json(groups);
     } catch (error) {
@@ -506,13 +506,13 @@ export async function registerRoutes(app: Express): Promise模Server> {
 
   app.get('/api/admin/announcements', isAuthenticated, async (req: any, res) => {
     try {
-      const userId = req.user.sub;
+      const userId = req.user.claims.sub;
       const user = await storage.getUser(userId);
-
+      
       if (user?.role !== 'admin') {
         return res.status(403).json({ message: "Admin access required" });
       }
-
+      
       const announcements = await storage.getAnnouncements();
       res.json(announcements);
     } catch (error) {
@@ -531,7 +531,7 @@ function mockExecuteCode(code: string, language: string) {
   const isCorrect = Math.random() > 0.3; // 70% success rate
   const runtime = Math.floor(Math.random() * 1000) + 50; // 50-1050ms
   const memory = Math.floor(Math.random() * 100) + 20; // 20-120MB
-
+  
   if (isCorrect) {
     return {
       status: 'accepted' as const,
@@ -544,13 +544,13 @@ function mockExecuteCode(code: string, language: string) {
     const errorTypes = ['wrong_answer', 'time_limit_exceeded', 'runtime_error'];
     const status = errorTypes[Math.floor(Math.random() * errorTypes.length)] as any;
     const score = status === 'wrong_answer' ? (Math.floor(Math.random() * 80) + 10).toString() + ".00" : "0.00";
-
+    
     const feedbacks = {
       wrong_answer: "Wrong answer on test case 2",
       time_limit_exceeded: "Time limit exceeded",
       runtime_error: "Runtime error: division by zero",
     };
-
+    
     return {
       status,
       runtime: status === 'time_limit_exceeded' ? 1000 : runtime,

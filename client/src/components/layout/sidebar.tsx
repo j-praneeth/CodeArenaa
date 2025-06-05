@@ -1,89 +1,83 @@
-
-import { cn } from "@/lib/utils";
-import { Button } from "@/components/ui/button";
-import { ScrollArea } from "@/components/ui/scroll-area";
-import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
+import { Link, useLocation } from "wouter";
+import { useQuery } from "@tanstack/react-query";
 import { 
-  Home, 
-  BookOpen, 
+  LayoutDashboard, 
+  Code, 
   Trophy, 
-  BarChart3, 
-  Settings, 
-  Menu,
-  Users
+  GraduationCap, 
+  ClipboardList 
 } from "lucide-react";
-import { Link, useLocation } from "react-router-dom";
-import { useAuth } from "@/hooks/useAuth";
+import { Progress } from "@/components/ui/progress";
 
-const navigation = [
-  { name: "Dashboard", href: "/dashboard", icon: Home },
-  { name: "Problems", href: "/problems", icon: BookOpen },
-  { name: "Contests", href: "/contests", icon: Trophy },
-  { name: "Leaderboard", href: "/leaderboard", icon: BarChart3 },
-  { name: "Settings", href: "/settings", icon: Settings },
-];
+export function Sidebar() {
+  const [location] = useLocation();
+  
+  const { data: userStats } = useQuery({
+    queryKey: ["/api/users/me/stats"],
+  });
 
-const adminNavigation = [
-  { name: "Admin Panel", href: "/admin", icon: Users },
-];
+  const sidebarItems = [
+    { path: "/", icon: LayoutDashboard, label: "Dashboard" },
+    { path: "/problems", icon: Code, label: "Practice Problems" },
+    { path: "/contests", icon: Trophy, label: "Contests" },
+    { path: "/courses", icon: GraduationCap, label: "Courses" },
+    { path: "/assignments", icon: ClipboardList, label: "Assignments" },
+  ];
 
-interface SidebarProps extends React.HTMLAttributes<HTMLDivElement> {}
+  const isActive = (path: string) => {
+    return location === path || (path !== "/" && location.startsWith(path));
+  };
 
-function Sidebar({ className }: SidebarProps) {
-  const location = useLocation();
-  const { user } = useAuth();
-  const isAdmin = user?.role === 'admin';
-
-  const allNavigation = isAdmin ? [...navigation, ...adminNavigation] : navigation;
+  const problemsProgress = userStats ? (userStats.accepted / 120) * 100 : 0;
 
   return (
-    <div className={cn("pb-12 min-h-screen", className)}>
-      <div className="space-y-4 py-4">
-        <div className="px-3 py-2">
-          <h2 className="mb-2 px-4 text-lg font-semibold tracking-tight">
-            CodeArena
-          </h2>
-          <div className="space-y-1">
-            {allNavigation.map((item) => (
-              <Button
-                key={item.name}
-                variant={location.pathname === item.href ? "secondary" : "ghost"}
-                className="w-full justify-start"
-                asChild
-              >
-                <Link to={item.href}>
-                  <item.icon className="mr-2 h-4 w-4" />
-                  {item.name}
-                </Link>
-              </Button>
-            ))}
+    <aside className="w-64 bg-white dark:bg-gray-900 border-r border-gray-200 dark:border-gray-800 hidden lg:block">
+      <div className="p-6">
+        <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">Quick Access</h2>
+        <nav className="space-y-2">
+          {sidebarItems.map((item) => (
+            <Link
+              key={item.path}
+              href={item.path}
+              className={`flex items-center space-x-3 px-3 py-2 rounded-lg transition-colors ${
+                isActive(item.path)
+                  ? "text-green-500 bg-green-50 dark:bg-green-900/20"
+                  : "text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white hover:bg-gray-50 dark:hover:bg-gray-800"
+              }`}
+            >
+              <item.icon className="w-5 h-5" />
+              <span className={isActive(item.path) ? "font-medium" : ""}>
+                {item.label}
+              </span>
+            </Link>
+          ))}
+        </nav>
+
+        <div className="mt-8">
+          <h3 className="text-sm font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-3">
+            Progress
+          </h3>
+          <div className="space-y-3">
+            <div>
+              <div className="flex justify-between text-sm mb-1">
+                <span className="text-gray-600 dark:text-gray-300">Problems Solved</span>
+                <span className="font-medium text-gray-900 dark:text-white">
+                  {userStats?.accepted || 0}/120
+                </span>
+              </div>
+              <Progress value={problemsProgress} className="h-2" />
+            </div>
+            <div>
+              <div className="flex justify-between text-sm mb-1">
+                <span className="text-gray-600 dark:text-gray-300">Current Streak</span>
+                <span className="font-medium text-green-500">
+                  {userStats?.streak || 0} days
+                </span>
+              </div>
+            </div>
           </div>
         </div>
       </div>
-    </div>
+    </aside>
   );
 }
-
-interface MobileSidebarProps {
-  className?: string;
-}
-
-function MobileSidebar({ className }: MobileSidebarProps) {
-  return (
-    <Sheet>
-      <SheetTrigger asChild>
-        <Button variant="outline" size="icon" className={className}>
-          <Menu className="h-4 w-4" />
-        </Button>
-      </SheetTrigger>
-      <SheetContent side="left" className="p-0">
-        <ScrollArea className="my-4 h-[calc(100vh-80px)] pb-10 pl-6">
-          <Sidebar />
-        </ScrollArea>
-      </SheetContent>
-    </Sheet>
-  );
-}
-
-export { Sidebar, MobileSidebar };
-export default Sidebar;
