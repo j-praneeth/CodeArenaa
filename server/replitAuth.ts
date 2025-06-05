@@ -10,9 +10,7 @@ import connectSanitizer from "connect-mongo";
 
 const MongoStore = connectSanitizer.default || connectSanitizer;
 
-if (!process.env.REPLIT_DOMAINS) {
-  throw new Error("Environment variable REPLIT_DOMAINS not provided");
-}
+// REPLIT_DOMAINS is optional for local development
 
 const getOidcConfig = memoize(
   async () => {
