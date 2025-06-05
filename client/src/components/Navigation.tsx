@@ -1,5 +1,8 @@
+The navigation component is updated to use Google OAuth for authentication.
+```
+
+```replit_final_file
 import { Link, useLocation } from "wouter";
-import { useAuth } from "@/hooks/useAuth";
 import { useTheme } from "@/components/ThemeProvider";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
@@ -10,10 +13,11 @@ import {
   DropdownMenuTrigger 
 } from "@/components/ui/dropdown-menu";
 import { Bell, Moon, Sun, Code, User, LogOut } from "lucide-react";
+import { useAuth } from "@/hooks/useAuth";
 
 export function Navigation() {
   const [location] = useLocation();
-  const { user, isAuthenticated } = useAuth();
+  const { user, isAuthenticated, login, logout, isLoggingOut } = useAuth();
   const { theme, toggleTheme } = useTheme();
 
   const navLinks = [
@@ -39,7 +43,7 @@ export function Navigation() {
               </div>
               <h1 className="text-xl font-bold text-gray-900 dark:text-white">CodeArena</h1>
             </Link>
-            
+
             {/* Navigation Links */}
             <div className="hidden md:flex space-x-8">
               {navLinks.map((link) => (
@@ -79,7 +83,7 @@ export function Navigation() {
             >
               <Bell className="h-5 w-5" />
             </Button>
-            
+
             <Button
               variant="ghost"
               size="icon"
@@ -116,9 +120,9 @@ export function Navigation() {
                     Settings
                   </Link>
                 </DropdownMenuItem>
-                <DropdownMenuItem onClick={() => window.location.href = "/api/logout"}>
+                <DropdownMenuItem onClick={logout} disabled={isLoggingOut}>
                   <LogOut className="mr-2 h-4 w-4" />
-                  Log out
+                  {isLoggingOut ? "Logging out..." : "Log out"}
                 </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
