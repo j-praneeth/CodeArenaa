@@ -6,6 +6,9 @@ import type { Express, RequestHandler } from "express";
 import memoize from "memoizee";
 import { MongoStore } from "connect-mongo";
 import { storage } from "./storage";
+import connectSanitizer from "connect-mongo";
+
+const MongoStore = connectSanitizer.default || connectSanitizer;
 
 if (!process.env.REPLIT_DOMAINS) {
   throw new Error("Environment variable REPLIT_DOMAINS not provided");
@@ -15,22 +18,23 @@ const getOidcConfig = memoize(
   async () => {
     return await client.discovery(
       new URL(process.env.ISSUER_URL ?? "https://replit.com/oidc"),
-      process.env.REPL_ID!
+      process.env.REPL_ID!,
     );
   },
-  { maxAge: 3600 * 1000 }
+  { maxAge: 3600 * 1000 },
 );
 
 export function getSession() {
   const sessionTtl = 7 * 24 * 60 * 60 * 1000; // 1 week
-  const mongoUrl = "mongodb+srv://bandarin29:meritcurve@meritcurve.73u7fr7.mongodb.net/";
+  const mongoUrl =
+    "mongodb+srv://bandarin29:meritcurve@meritcurve.73u7fr7.mongodb.net/";
 
   return session({
     secret: process.env.SESSION_SECRET!,
     store: MongoStore.create({
       mongoUrl,
-      dbName: 'meritcurve',
-      collectionName: 'sessions',
+      dbName: "meritcurve",
+      collectionName: "sessions",
       ttl: sessionTtl / 1000, // TTL in seconds
     }),
     resave: false,
@@ -45,7 +49,7 @@ export function getSession() {
 
 async function verify(
   issuer: client.IssuerMetadata,
-  tokens: { userinfo?: any }
+  tokens: { userinfo?: any },
 ): Promise<any> {
   const user = {
     id: tokens.userinfo?.sub || "unknown",
@@ -66,10 +70,7 @@ export async function setupAuth(app: Express) {
 
   const oidcConfig = await getOidcConfig();
 
-  passport.use(
-    "oidc",
-    new Strategy({ config: oidcConfig }, verify)
-  );
+  passport.use("oidc", new Strategy({ config: oidcConfig }, verify));
 
   passport.serializeUser((user, done) => {
     done(null, user);
@@ -90,7 +91,7 @@ export async function setupAuth(app: Express) {
     passport.authenticate("oidc", {
       successRedirect: "/",
       failureRedirect: "/login?error=auth_failed",
-    })
+    }),
   );
 
   app.get("/api/logout", (req, res) => {
