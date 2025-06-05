@@ -1,13 +1,7 @@
 
 import { MongoClient, Db } from 'mongodb';
 
-if (!process.env.MONGODB_URL) {
-  throw new Error(
-    "MONGODB_URL must be set. Using the provided MongoDB connection string.",
-  );
-}
-
-const MONGODB_URL = "mongodb+srv://bandarin29:meritcurve@meritcurve.73u7fr7.mongodb.net/";
+const MONGODB_URL = process.env.MONGODB_URL || "mongodb+srv://bandarin29:meritcurve@meritcurve.73u7fr7.mongodb.net/";
 
 let client: MongoClient;
 let db: Db;
