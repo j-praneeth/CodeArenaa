@@ -1,5 +1,4 @@
-
-import { ObjectId, Collection } from 'mongodb';
+import { ObjectId, Collection, Filter, UpdateFilter } from 'mongodb';
 import { getDb } from './db';
 
 // MongoDB document interfaces
@@ -13,6 +12,12 @@ export interface User {
   role: string;
   createdAt: Date;
   updatedAt: Date;
+}
+
+export interface UserLogin {
+  _id?: ObjectId;
+  userId: string;
+  timestamp: Date;
 }
 
 export interface Problem {
@@ -173,6 +178,13 @@ export interface IStorage {
     total: number;
     accepted: number;
     streak: number;
+    problemsSolved: number;
+    totalProblems: number;
+    courseProgress: {
+      currentCourse: string;
+      progress: number;
+    };
+    contestRank: number;
   }>;
   getContests(): Promise<Contest[]>;
   getContest(id: number): Promise<Contest | undefined>;
@@ -228,17 +240,17 @@ export class MongoStorage implements IStorage {
     const db = getDb();
     const counters = db.collection('counters');
     const result = await counters.findOneAndUpdate(
-      { _id: collection },
-      { $inc: { seq: 1 } },
+      { _id: collection } as Filter<any>,
+      { $inc: { seq: 1 } } as UpdateFilter<any>,
       { upsert: true, returnDocument: 'after' }
     );
-    return result.seq;
+    return result?.seq || 1;
   }
 
   async getUser(id: string): Promise<User | undefined> {
     const db = getDb();
     const users = db.collection<User>('users');
-    const user = await users.findOne({ id });
+    const user = await users.findOne({ id } as Filter<User>);
     return user || undefined;
   }
 
@@ -247,20 +259,34 @@ export class MongoStorage implements IStorage {
     const users = db.collection<User>('users');
     const now = new Date();
     
-    const user = await users.findOneAndUpdate(
-      { id: userData.id },
+    const result = await users.findOneAndUpdate(
+      { id: userData.id } as Filter<User>,
       {
         $set: {
           ...userData,
-          updatedAt: now,
+          updatedAt: now
         },
         $setOnInsert: {
-          createdAt: now,
-        },
-      },
+          createdAt: now
+        }
+      } as UpdateFilter<User>,
       { upsert: true, returnDocument: 'after' }
     );
-    return user!;
+
+    if (!result) {
+      throw new Error('Failed to upsert user');
+    }
+
+    // Record login
+    const logins = db.collection<UserLogin>('userLogins');
+    await logins.insertOne({
+      userId: userData.id,
+      timestamp: now
+    });
+    
+    // Convert MongoDB document to User type
+    const { _id, ...user } = result;
+    return user;
   }
 
   async getProblems(): Promise<Problem[]> {
@@ -294,21 +320,45 @@ export class MongoStorage implements IStorage {
   }
 
   async updateProblem(id: number, problem: Partial<InsertProblem>): Promise<Problem> {
-    const db = getDb();
+    const db = await getDb();
     const problems = db.collection<Problem>('problems');
-    
-    const updatedProblem = await problems.findOneAndUpdate(
+
+    console.log('[DEBUG] Updating problem:', { id, problem });
+
+    const updateData: UpdateFilter<Problem> = {
+      $set: {
+        ...problem,
+        updatedAt: new Date()
+      }
+    };
+
+    const result = await problems.findOneAndUpdate(
       { id },
-      { $set: { ...problem, updatedAt: new Date() } },
+      updateData,
       { returnDocument: 'after' }
     );
-    return updatedProblem!;
+
+    if (!result) {
+      throw new Error(`Problem with id ${id} not found`);
+    }
+
+    console.log('[DEBUG] Problem updated:', result);
+    return result;
   }
 
   async deleteProblem(id: number): Promise<void> {
-    const db = getDb();
+    const db = await getDb();
     const problems = db.collection<Problem>('problems');
-    await problems.deleteOne({ id });
+
+    console.log('[DEBUG] Deleting problem:', id);
+    
+    const result = await problems.deleteOne({ id });
+    
+    if (result.deletedCount === 0) {
+      throw new Error(`Problem with id ${id} not found`);
+    }
+
+    console.log('[DEBUG] Problem deleted successfully');
   }
 
   async getSubmissions(userId?: string, problemId?: number): Promise<Submission[]> {
@@ -360,34 +410,128 @@ export class MongoStorage implements IStorage {
     total: number;
     accepted: number;
     streak: number;
+    problemsSolved: number;
+    totalProblems: number;
+    courseProgress: {
+      currentCourse: string;
+      progress: number;
+    };
+    contestRank: number;
   }> {
     const db = getDb();
     const submissions = db.collection<Submission>('submissions');
+    const logins = db.collection<UserLogin>('userLogins');
+    const problems = db.collection<Problem>('problems');
+    const courses = db.collection<Course>('courses');
+    const userProgress = db.collection<UserProgress>('userProgress');
+    const contestParticipants = db.collection<ContestParticipant>('contestParticipants');
     
+    // Get all user submissions
     const userSubmissions = await submissions.find({ userId }).sort({ submittedAt: -1 }).toArray();
     const total = userSubmissions.length;
     const accepted = userSubmissions.filter(s => s.status === 'accepted').length;
     
-    // Calculate streak (simplified - count consecutive days with submissions)
+    // Get total problems count
+    const totalProblems = await problems.countDocuments({ isPublic: true });
+    
+    // Get problems solved (unique problems with accepted submissions)
+    const problemsSolved = new Set(
+      userSubmissions
+        .filter(s => s.status === 'accepted')
+        .map(s => s.problemId)
+    ).size;
+
+    // Get user's current course and progress
+    const userCourseProgress = await userProgress.find({ userId }).toArray();
+    const enrolledCourses = await courses.find({
+      enrolledUsers: userId,
+      isPublic: true
+    }).toArray();
+
+    let courseProgress = {
+      currentCourse: "No course started",
+      progress: 0
+    };
+
+    if (enrolledCourses.length > 0) {
+      const latestCourse = enrolledCourses[0];
+      const courseProblems = latestCourse.problems || [];
+      const solvedCourseProblems = userCourseProgress.filter(
+        p => courseProblems.includes(p.problemId) && p.status === 'solved'
+      ).length;
+
+      courseProgress = {
+        currentCourse: latestCourse.title,
+        progress: courseProblems.length > 0 
+          ? Math.round((solvedCourseProblems / courseProblems.length) * 100)
+          : 0
+      };
+    }
+
+    // Get contest rank
+    const contestRank = await contestParticipants
+      .find({})
+      .sort({ score: -1 })
+      .toArray()
+      .then(participants => {
+        const userIndex = participants.findIndex(p => p.userId === userId);
+        return userIndex >= 0 ? userIndex + 1 : 0;
+      });
+    
+    // Get user logins for the past 30 days
+    const thirtyDaysAgo = new Date();
+    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+    
+    const userLogins = await logins.find({
+      userId,
+      timestamp: { $gte: thirtyDaysAgo }
+    }).sort({ timestamp: -1 }).toArray();
+
+    // Calculate streak points
     let streak = 0;
     const today = new Date();
     const oneDayMs = 24 * 60 * 60 * 1000;
     
+    // Group submissions by date
+    const submissionsByDate = new Map<string, number>();
+    userSubmissions.forEach(submission => {
+      const date = new Date(submission.submittedAt).toDateString();
+      if (submission.status === 'accepted') {
+        submissionsByDate.set(date, (submissionsByDate.get(date) || 0) + 2); // 2 points per solved problem
+      }
+    });
+
+    // Group logins by date
+    const loginsByDate = new Map<string, boolean>();
+    userLogins.forEach(login => {
+      const date = new Date(login.timestamp).toDateString();
+      loginsByDate.set(date, true); // 1 point per daily login
+    });
+
+    // Calculate streak by checking consecutive days
     for (let i = 0; i < 30; i++) {
       const checkDate = new Date(today.getTime() - i * oneDayMs);
-      const hasSubmission = userSubmissions.some(s => {
-        const submissionDate = new Date(s.submittedAt!);
-        return submissionDate.toDateString() === checkDate.toDateString();
-      });
+      const dateStr = checkDate.toDateString();
       
-      if (hasSubmission) {
-        streak++;
+      const pointsForDay = (submissionsByDate.get(dateStr) || 0) + (loginsByDate.get(dateStr) ? 1 : 0);
+      
+      if (pointsForDay > 0) {
+        streak += pointsForDay;
       } else if (i > 0) {
+        // Break streak if no points on a day (except today)
         break;
       }
     }
     
-    return { total, accepted, streak };
+    return { 
+      total, 
+      accepted, 
+      streak,
+      problemsSolved,
+      totalProblems,
+      courseProgress,
+      contestRank
+    };
   }
 
   async getContests(): Promise<Contest[]> {
