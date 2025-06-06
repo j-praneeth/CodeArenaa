@@ -4,12 +4,15 @@ import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { Calendar, Trophy, Code, Clock, TrendingUp } from "lucide-react";
+import { Calendar, Trophy, Code, Clock, TrendingUp, ArrowLeft } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
+import { Button } from "@/components/ui/button";
+import { useLocation } from "wouter";
 import type { Submission, Problem } from "@shared/schema";
 
 export default function Profile() {
   const { user } = useAuth();
+  const [, setLocation] = useLocation();
 
   const { data: submissions, isLoading: submissionsLoading } = useQuery({
     queryKey: ["/api/submissions"],
@@ -47,6 +50,15 @@ export default function Profile() {
 
   return (
     <div className="container mx-auto p-6 space-y-6">
+      <Button
+        variant="ghost"
+        className="mb-4 flex items-center gap-2 hover:bg-gray-100 dark:hover:bg-gray-800"
+        onClick={() => setLocation('/dashboard')}
+      >
+        <ArrowLeft className="h-4 w-4" />
+        Back to Dashboard
+      </Button>
+
       <div className="flex items-start gap-6">
         <Avatar className="w-24 h-24">
           <AvatarImage src={user.profileImageUrl || ""} alt={user.firstName || ""} />

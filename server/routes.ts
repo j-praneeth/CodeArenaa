@@ -1,7 +1,7 @@
 import type { Express } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
-import { setupAuth, isAuthenticated } from "./replitAuth";
+import { protect as isAuthenticated, requireAdmin } from "./middleware/auth";
 import { 
   insertProblemSchema, 
   insertSubmissionSchema, 
@@ -14,23 +14,71 @@ import {
 import { z } from "zod";
 
 export async function registerRoutes(app: Express): Promise<Server> {
-  // Auth middleware
-  await setupAuth(app);
+  const server = createServer(app);
 
   // Auth routes
   app.get('/api/auth/user', isAuthenticated, async (req: any, res) => {
     try {
-      const userId = req.user.claims.sub;
-      const user = await storage.getUser(userId);
-      res.json(user);
+      res.json(req.user);
     } catch (error) {
       console.error("Error fetching user:", error);
       res.status(500).json({ message: "Failed to fetch user" });
     }
   });
 
+  // Admin routes
+  app.get('/api/admin/analytics', isAuthenticated, requireAdmin, async (req: any, res) => {
+    try {
+      const analytics = await storage.getAdminAnalytics();
+      res.json(analytics);
+    } catch (error) {
+      console.error("Error fetching admin analytics:", error);
+      res.status(500).json({ message: "Failed to fetch admin analytics" });
+    }
+  });
+
+  app.get('/api/admin/users', isAuthenticated, requireAdmin, async (req: any, res) => {
+    try {
+      const users = await storage.getAllUsers();
+      res.json(users);
+    } catch (error) {
+      console.error("Error fetching users:", error);
+      res.status(500).json({ message: "Failed to fetch users" });
+    }
+  });
+
+  app.get('/api/admin/assignments', isAuthenticated, requireAdmin, async (req: any, res) => {
+    try {
+      const assignments = await storage.getAssignments();
+      res.json(assignments);
+    } catch (error) {
+      console.error("Error fetching assignments:", error);
+      res.status(500).json({ message: "Failed to fetch assignments" });
+    }
+  });
+
+  app.get('/api/admin/groups', isAuthenticated, requireAdmin, async (req: any, res) => {
+    try {
+      const groups = await storage.getGroups();
+      res.json(groups);
+    } catch (error) {
+      console.error("Error fetching groups:", error);
+      res.status(500).json({ message: "Failed to fetch groups" });
+    }
+  });
+
+  app.get('/api/admin/announcements', isAuthenticated, requireAdmin, async (req: any, res) => {
+    try {
+      const announcements = await storage.getAnnouncements();
+      res.json(announcements);
+    } catch (error) {
+      console.error("Error fetching announcements:", error);
+      res.status(500).json({ message: "Failed to fetch announcements" });
+    }
+  });
+
   // Problem routes
-  app.get('/api/problems', async (req, res) => {
+  app.get('/api/problems', isAuthenticated, async (req, res) => {
     try {
       const problems = await storage.getProblems();
       res.json(problems);
@@ -382,17 +430,24 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Contest participant routes
-  app.post('/api/contests/:id/register', isAuthenticated, async (req: any, res) => {
+  // Contest participation
+  app.post('/api/contests/:id/participate', isAuthenticated, async (req: any, res) => {
     try {
       const contestId = parseInt(req.params.id);
-      const userId = req.user.claims.sub;
-      
+      const userId = req.user._id;
+
+      const contest = await storage.getContest(contestId);
+      if (!contest) {
+        return res.status(404).json({ message: "Contest not found" });
+      }
+
       const participant = await storage.registerForContest({
         contestId,
         userId,
+        score: "0.00",
+        submissions: 0
       });
-      
+
       res.status(201).json(participant);
     } catch (error) {
       console.error("Error registering for contest:", error);
@@ -412,40 +467,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Admin routes
-  app.get('/api/admin/analytics', isAuthenticated, async (req: any, res) => {
-    try {
-      const userId = req.user.claims.sub;
-      const user = await storage.getUser(userId);
-      
-      if (user?.role !== 'admin') {
-        return res.status(403).json({ message: "Admin access required" });
-      }
-      
-      const analytics = await storage.getAdminAnalytics();
-      res.json(analytics);
-    } catch (error) {
-      console.error("Error fetching admin analytics:", error);
-      res.status(500).json({ message: "Failed to fetch analytics" });
-    }
-  });
-
-  app.get('/api/admin/users', isAuthenticated, async (req: any, res) => {
-    try {
-      const userId = req.user.claims.sub;
-      const user = await storage.getUser(userId);
-      
-      if (user?.role !== 'admin') {
-        return res.status(403).json({ message: "Admin access required" });
-      }
-      
-      const users = await storage.getAllUsers();
-      res.json(users);
-    } catch (error) {
-      console.error("Error fetching users:", error);
-      res.status(500).json({ message: "Failed to fetch users" });
-    }
-  });
-
   app.patch('/api/admin/users/:id/role', isAuthenticated, async (req: any, res) => {
     try {
       const currentUserId = req.user.claims.sub;
@@ -470,93 +491,26 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.get('/api/admin/assignments', isAuthenticated, async (req: any, res) => {
-    try {
-      const userId = req.user.claims.sub;
-      const user = await storage.getUser(userId);
-      
-      if (user?.role !== 'admin') {
-        return res.status(403).json({ message: "Admin access required" });
-      }
-      
-      const assignments = await storage.getAssignments();
-      res.json(assignments);
-    } catch (error) {
-      console.error("Error fetching all assignments:", error);
-      res.status(500).json({ message: "Failed to fetch assignments" });
-    }
-  });
-
-  app.get('/api/admin/groups', isAuthenticated, async (req: any, res) => {
-    try {
-      const userId = req.user.claims.sub;
-      const user = await storage.getUser(userId);
-      
-      if (user?.role !== 'admin') {
-        return res.status(403).json({ message: "Admin access required" });
-      }
-      
-      const groups = await storage.getGroups();
-      res.json(groups);
-    } catch (error) {
-      console.error("Error fetching all groups:", error);
-      res.status(500).json({ message: "Failed to fetch groups" });
-    }
-  });
-
-  app.get('/api/admin/announcements', isAuthenticated, async (req: any, res) => {
-    try {
-      const userId = req.user.claims.sub;
-      const user = await storage.getUser(userId);
-      
-      if (user?.role !== 'admin') {
-        return res.status(403).json({ message: "Admin access required" });
-      }
-      
-      const announcements = await storage.getAnnouncements();
-      res.json(announcements);
-    } catch (error) {
-      console.error("Error fetching all announcements:", error);
-      res.status(500).json({ message: "Failed to fetch announcements" });
-    }
-  });
-
-  const httpServer = createServer(app);
-  return httpServer;
+  return server;
 }
 
 // Mock code execution function - replace with actual judge system
 function mockExecuteCode(code: string, language: string) {
-  // Simple mock that randomly determines success/failure
-  const isCorrect = Math.random() > 0.3; // 70% success rate
-  const runtime = Math.floor(Math.random() * 1000) + 50; // 50-1050ms
-  const memory = Math.floor(Math.random() * 100) + 20; // 20-120MB
+  // Mock execution results
+  const results = {
+    wrong_answer: "Your solution produced incorrect output",
+    time_limit_exceeded: "Your solution took too long to execute",
+    runtime_error: "Your solution encountered a runtime error"
+  };
+
+  // Mock execution logic
+  const status = Math.random() > 0.5 ? 'accepted' : 'wrong_answer';
   
-  if (isCorrect) {
-    return {
-      status: 'accepted' as const,
-      runtime,
-      memory,
-      score: "100.00",
-      feedback: "All test cases passed!",
-    };
-  } else {
-    const errorTypes = ['wrong_answer', 'time_limit_exceeded', 'runtime_error'];
-    const status = errorTypes[Math.floor(Math.random() * errorTypes.length)] as any;
-    const score = status === 'wrong_answer' ? (Math.floor(Math.random() * 80) + 10).toString() + ".00" : "0.00";
-    
-    const feedbacks = {
-      wrong_answer: "Wrong answer on test case 2",
-      time_limit_exceeded: "Time limit exceeded",
-      runtime_error: "Runtime error: division by zero",
-    };
-    
-    return {
-      status,
-      runtime: status === 'time_limit_exceeded' ? 1000 : runtime,
-      memory,
-      score,
-      feedback: feedbacks[status],
-    };
-  }
+  return {
+    status,
+    runtime: Math.floor(Math.random() * 1000),
+    memory: Math.floor(Math.random() * 50000),
+    score: status === 'accepted' ? "100.00" : "0.00",
+    feedback: status === 'accepted' ? "All test cases passed!" : results['wrong_answer'] as string
+  };
 }

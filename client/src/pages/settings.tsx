@@ -11,6 +11,7 @@ import { Separator } from "@/components/ui/separator";
 import { useToast } from "@/hooks/use-toast";
 import { useTheme } from "@/components/ui/theme-provider";
 import { useAuth } from "@/hooks/useAuth";
+import { useLocation } from "wouter";
 import { 
   User, 
   Bell, 
@@ -20,13 +21,15 @@ import {
   Globe,
   Monitor,
   Moon,
-  Sun
+  Sun,
+  ArrowLeft
 } from "lucide-react";
 
 export default function Settings() {
   const { user } = useAuth();
   const { theme, setTheme } = useTheme();
   const { toast } = useToast();
+  const [, setLocation] = useLocation();
   
   const [notifications, setNotifications] = useState({
     email: true,
@@ -78,6 +81,15 @@ export default function Settings() {
 
   return (
     <div className="container mx-auto p-6 space-y-6">
+      <Button
+        variant="ghost"
+        className="mb-4 flex items-center gap-2 hover:bg-gray-100 dark:hover:bg-gray-800"
+        onClick={() => window.history.back()}
+      >
+        <ArrowLeft className="h-4 w-4" />
+        Back
+      </Button>
+
       <div>
         <h1 className="text-3xl font-bold">Settings</h1>
         <p className="text-muted-foreground">Manage your account preferences and settings</p>

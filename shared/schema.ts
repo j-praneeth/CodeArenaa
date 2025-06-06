@@ -10,19 +10,46 @@ export const insertUserSchema = z.object({
   role: z.string().default("student"),
 });
 
+export const testCaseSchema = z.object({
+  input: z.string(),
+  expectedOutput: z.string(),
+  explanation: z.string().optional(),
+  isHidden: z.boolean().default(false),
+  timeLimit: z.number().optional(),
+  memoryLimit: z.number().optional(),
+});
+
+export const starterCodeSchema = z.object({
+  python: z.string().optional(),
+  javascript: z.string().optional(),
+  java: z.string().optional(),
+  cpp: z.string().optional(),
+});
+
+export const exampleSchema = z.object({
+  input: z.string(),
+  output: z.string(),
+  explanation: z.string().optional(),
+});
+
 export const insertProblemSchema = z.object({
   title: z.string(),
   description: z.string(),
-  difficulty: z.string(),
+  difficulty: z.enum(["easy", "medium", "hard"]),
   tags: z.array(z.string()).optional(),
   constraints: z.string().optional(),
-  examples: z.any().optional(),
-  testCases: z.any().optional(),
-  timeLimit: z.number().default(1000),
-  memoryLimit: z.number().default(256),
-  starterCode: z.any().optional(),
+  inputFormat: z.string(),
+  outputFormat: z.string(),
+  examples: z.array(exampleSchema).min(1),
+  testCases: z.array(testCaseSchema).min(1),
+  timeLimit: z.number().default(1000), // milliseconds
+  memoryLimit: z.number().default(256), // MB
+  starterCode: starterCodeSchema,
   isPublic: z.boolean().default(true),
   createdBy: z.string().optional(),
+  solutionCode: starterCodeSchema.optional(),
+  notes: z.string().optional(), // Admin notes about the problem
+  difficulty_rating: z.number().min(1).max(5).optional(), // More granular difficulty rating
 });
 
 export const insertSubmissionSchema = z.object({

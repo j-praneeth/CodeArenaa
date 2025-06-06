@@ -15,6 +15,8 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { useToast } from "@/hooks/use-toast";
+import { useAuth } from "@/hooks/useAuth";
+import { useLocation } from "wouter";
 import { 
   Users, 
   Trophy, 
@@ -31,8 +33,24 @@ import {
   MessageSquare,
   UsersIcon
 } from "lucide-react";
-import { useState } from "react";
-import type { User, Assignment, Group, Announcement } from "@shared/schema";
+import { useState, useCallback, useEffect } from "react";
+import type { User, Assignment, Group, Announcement } from "@/shared/schema";
+import { config } from "@/config";
+
+// Analytics type definition
+interface Analytics {
+  totalUsers: number;
+  totalProblems: number;
+  totalSubmissions: number;
+  activeContests: number;
+  recentActivity: Array<{
+    id: string;
+    problemId: string;
+    language: string;
+    status: string;
+    timestamp: string;
+  }>;
+}
 
 // Form schemas
 const assignmentSchema = z.object({
@@ -59,113 +77,241 @@ const announcementSchema = z.object({
 });
 
 export default function AdminDashboard() {
+  const [location, setLocation] = useLocation();
+  const { user, isAuthenticated } = useAuth();
   const { toast } = useToast();
   const [selectedTab, setSelectedTab] = useState("overview");
   const [showCreateAssignment, setShowCreateAssignment] = useState(false);
   const [showCreateGroup, setShowCreateGroup] = useState(false);
   const [showCreateAnnouncement, setShowCreateAnnouncement] = useState(false);
 
-  // Queries
+  useEffect(() => {
+    // Handle authentication data from URL parameters (Google OAuth callback)
+    const params = new URLSearchParams(window.location.search);
+    const token = params.get('token');
+    const userStr = params.get('user');
+
+    if (token && userStr) {
+      try {
+        const userData = JSON.parse(decodeURIComponent(userStr));
+        // Store auth data
+        localStorage.setItem('token', token);
+        localStorage.setItem('user', JSON.stringify(userData));
+        
+        // Clean up URL parameters
+        const cleanUrl = window.location.pathname;
+        window.history.replaceState({}, document.title, cleanUrl);
+        
+        // Show success message
+        toast({
+          title: "Successfully signed in",
+          description: `Welcome back${userData.firstName ? ', ' + userData.firstName : ''}!`
+        });
+      } catch (error) {
+        console.error('[DEBUG] Error processing auth data:', error);
+      }
+    }
+  }, []); // Run only once on mount
+
+  useEffect(() => {
+    // Redirect if not authenticated or not admin
+    if (!isAuthenticated || user?.role !== 'admin') {
+      setLocation('/dashboard');
+    }
+  }, [isAuthenticated, user, setLocation]); // Only depend on auth state and navigation
+
+  if (!isAuthenticated || !user || user.role !== 'admin') {
+    return null;
+  }
+
+  // Get token once and store it
+  const token = localStorage.getItem('token');
+  
+  // Common fetch options
+  const fetchOptions = {
+    credentials: 'include' as const,
+    headers: {
+      'Authorization': `Bearer ${token}`,
+      'Content-Type': 'application/json',
+    },
+  };
+
+  // Queries with proper configuration and error handling
   const { data: analytics, isLoading: analyticsLoading } = useQuery({
-    queryKey: ["/api/admin/analytics"],
+    queryKey: ["admin", "analytics"],
+    queryFn: async () => {
+      const res = await fetch(`${config.apiUrl}/api/admin/analytics`, fetchOptions);
+      if (!res.ok) {
+        const error = await res.text();
+        throw new Error(error);
+      }
+      return res.json();
+    },
+    retry: false,
+    enabled: !!token && isAuthenticated,
   });
 
   const { data: users, isLoading: usersLoading } = useQuery({
-    queryKey: ["/api/admin/users"],
+    queryKey: ["admin", "users"],
+    queryFn: async () => {
+      const res = await fetch(`${config.apiUrl}/api/admin/users`, fetchOptions);
+      if (!res.ok) {
+        const error = await res.text();
+        throw new Error(error);
+      }
+      return res.json();
+    },
+    retry: false,
+    enabled: !!token && isAuthenticated,
   });
 
   const { data: assignments, isLoading: assignmentsLoading } = useQuery({
-    queryKey: ["/api/admin/assignments"],
+    queryKey: ["admin", "assignments"],
+    queryFn: async () => {
+      const res = await fetch(`${config.apiUrl}/api/admin/assignments`, fetchOptions);
+      if (!res.ok) {
+        const error = await res.text();
+        throw new Error(error);
+      }
+      return res.json();
+    },
+    retry: false,
+    enabled: !!token && isAuthenticated,
   });
 
   const { data: groups, isLoading: groupsLoading } = useQuery({
-    queryKey: ["/api/admin/groups"],
+    queryKey: ["admin", "groups"],
+    queryFn: async () => {
+      const res = await fetch(`${config.apiUrl}/api/admin/groups`, fetchOptions);
+      if (!res.ok) {
+        const error = await res.text();
+        throw new Error(error);
+      }
+      return res.json();
+    },
+    retry: false,
+    enabled: !!token && isAuthenticated,
   });
 
   const { data: announcements, isLoading: announcementsLoading } = useQuery({
-    queryKey: ["/api/admin/announcements"],
+    queryKey: ["admin", "announcements"],
+    queryFn: async () => {
+      const res = await fetch(`${config.apiUrl}/api/admin/announcements`, fetchOptions);
+      if (!res.ok) {
+        const error = await res.text();
+        throw new Error(error);
+      }
+      return res.json();
+    },
+    retry: false,
+    enabled: !!token && isAuthenticated,
   });
 
   const { data: problems } = useQuery({
-    queryKey: ["/api/problems"],
+    queryKey: ["problems"],
+    queryFn: async () => {
+      const res = await fetch(`${config.apiUrl}/api/problems`, fetchOptions);
+      if (!res.ok) {
+        const error = await res.text();
+        throw new Error(error);
+      }
+      return res.json();
+    },
+    retry: false,
+    enabled: !!token && isAuthenticated,
   });
 
-  // Mutations
+  // Mutations with proper error handling
   const updateUserRoleMutation = useMutation({
     mutationFn: async ({ userId, role }: { userId: string; role: string }) => {
-      const res = await fetch(`/api/admin/users/${userId}/role`, {
+      const res = await fetch(`${config.apiUrl}/api/admin/users/${userId}/role`, {
         method: "PATCH",
-        headers: { "Content-Type": "application/json" },
+        ...fetchOptions,
         body: JSON.stringify({ role }),
       });
-      if (!res.ok) throw new Error(await res.text());
+      if (!res.ok) {
+        const error = await res.text();
+        throw new Error(error);
+      }
       return res.json();
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/admin/users"] });
+      queryClient.invalidateQueries({ queryKey: ["admin", "users"] });
       toast({ title: "Success", description: "User role updated successfully" });
     },
-    onError: (error) => {
+    onError: (error: Error) => {
       toast({ title: "Error", description: error.message, variant: "destructive" });
     },
   });
 
   const createAssignmentMutation = useMutation({
     mutationFn: async (data: z.infer<typeof assignmentSchema>) => {
-      const res = await fetch("/api/assignments", {
+      const res = await fetch(`${config.apiUrl}/api/assignments`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { 
+          "Content-Type": "application/json",
+          'Authorization': `Bearer ${localStorage.getItem('token')}`,
+        },
+        credentials: 'include',
         body: JSON.stringify(data),
       });
       if (!res.ok) throw new Error(await res.text());
       return res.json();
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/admin/assignments"] });
+      queryClient.invalidateQueries({ queryKey: ["admin", "assignments"] });
       setShowCreateAssignment(false);
       toast({ title: "Success", description: "Assignment created successfully" });
     },
-    onError: (error) => {
+    onError: (error: Error) => {
       toast({ title: "Error", description: error.message, variant: "destructive" });
     },
   });
 
   const createGroupMutation = useMutation({
     mutationFn: async (data: z.infer<typeof groupSchema>) => {
-      const res = await fetch("/api/groups", {
+      const res = await fetch(`${config.apiUrl}/api/groups`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { 
+          "Content-Type": "application/json",
+          'Authorization': `Bearer ${localStorage.getItem('token')}`,
+        },
+        credentials: 'include',
         body: JSON.stringify(data),
       });
       if (!res.ok) throw new Error(await res.text());
       return res.json();
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/admin/groups"] });
+      queryClient.invalidateQueries({ queryKey: ["admin", "groups"] });
       setShowCreateGroup(false);
       toast({ title: "Success", description: "Group created successfully" });
     },
-    onError: (error) => {
+    onError: (error: Error) => {
       toast({ title: "Error", description: error.message, variant: "destructive" });
     },
   });
 
   const createAnnouncementMutation = useMutation({
     mutationFn: async (data: z.infer<typeof announcementSchema>) => {
-      const res = await fetch("/api/announcements", {
+      const res = await fetch(`${config.apiUrl}/api/announcements`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { 
+          "Content-Type": "application/json",
+          'Authorization': `Bearer ${localStorage.getItem('token')}`,
+        },
+        credentials: 'include',
         body: JSON.stringify(data),
       });
       if (!res.ok) throw new Error(await res.text());
       return res.json();
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/admin/announcements"] });
+      queryClient.invalidateQueries({ queryKey: ["admin", "announcements"] });
       setShowCreateAnnouncement(false);
       toast({ title: "Success", description: "Announcement created successfully" });
     },
-    onError: (error) => {
+    onError: (error: Error) => {
       toast({ title: "Error", description: error.message, variant: "destructive" });
     },
   });
@@ -203,9 +349,14 @@ export default function AdminDashboard() {
     },
   });
 
-  const handleUpdateUserRole = (userId: string, role: string) => {
+  // Memoized handlers to prevent re-renders
+  const handleUpdateUserRole = useCallback((userId: string, role: string) => {
     updateUserRoleMutation.mutate({ userId, role });
-  };
+  }, [updateUserRoleMutation]);
+
+  const handleTabChange = useCallback((value: string) => {
+    setSelectedTab(value);
+  }, []);
 
   const onAssignmentSubmit = (data: z.infer<typeof assignmentSchema>) => {
     createAssignmentMutation.mutate(data);
@@ -219,8 +370,12 @@ export default function AdminDashboard() {
     createAnnouncementMutation.mutate(data);
   };
 
-  if (analyticsLoading) {
-    return <div className="flex items-center justify-center h-64">Loading admin dashboard...</div>;
+  if (analyticsLoading || usersLoading || assignmentsLoading || groupsLoading || announcementsLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="animate-spin rounded-full h-32 w-32 border-b-2 border-green-500"></div>
+      </div>
+    );
   }
 
   return (
@@ -246,7 +401,7 @@ export default function AdminDashboard() {
         </div>
       </div>
 
-      <Tabs value={selectedTab} onValueChange={setSelectedTab} className="space-y-4">
+      <Tabs value={selectedTab} onValueChange={handleTabChange} className="space-y-4">
         <TabsList className="grid w-full grid-cols-6">
           <TabsTrigger value="overview">Overview</TabsTrigger>
           <TabsTrigger value="users">Users</TabsTrigger>

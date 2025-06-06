@@ -1,83 +1,43 @@
 import { useEffect } from "react";
 import { useAuth } from "@/hooks/useAuth";
-import { useToast } from "@/hooks/use-toast";
-import { Navigation } from "@/components/layout/navigation";
-import { Sidebar } from "@/components/layout/sidebar";
+import { useToast } from "@/components/ui/use-toast";
+import { useLocation } from "wouter";
 import { StatsGrid } from "@/components/dashboard/stats-grid";
 import { RecentProblems } from "@/components/dashboard/recent-problems";
 import { UpcomingContests } from "@/components/dashboard/upcoming-contests";
 import { Leaderboard } from "@/components/dashboard/leaderboard";
 import { Button } from "@/components/ui/button";
 import { Plus, HelpCircle } from "lucide-react";
+import AdminDashboard from "./admin-dashboard";
 
-export default function Dashboard() {
-  const { user, isAuthenticated, isLoading } = useAuth();
-  const { toast } = useToast();
-
-  // Redirect to home if not authenticated
-  useEffect(() => {
-    if (!isLoading && !isAuthenticated) {
-      toast({
-        title: "Unauthorized",
-        description: "You are logged out. Logging in again...",
-        variant: "destructive",
-      });
-      setTimeout(() => {
-        window.location.href = "/api/login";
-      }, 500);
-      return;
-    }
-  }, [isAuthenticated, isLoading, toast]);
-
-  if (isLoading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="animate-spin rounded-full h-32 w-32 border-b-2 border-green-500"></div>
-      </div>
-    );
-  }
-
-  if (!isAuthenticated || !user) {
-    return null;
-  }
-
+function UserDashboard({ user }: { user: any }) {
   return (
-    <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
-      <Navigation />
-      <div className="flex">
-        <Sidebar />
-        
-        {/* Main Content */}
-        <main className="flex-1 overflow-auto">
-          <div className="p-6">
-            {/* Header Section */}
-            <div className="mb-8">
-              <h1 className="text-2xl font-bold text-gray-900 dark:text-white mb-2">
-                Welcome back, {user.firstName || "User"}!
-              </h1>
-              <p className="text-gray-600 dark:text-gray-400">
-                Continue your coding journey and track your progress.
-              </p>
-            </div>
+    <div className="p-6">
+      {/* Header Section */}
+      <div className="mb-8">
+        <h1 className="text-2xl font-bold text-gray-900 dark:text-white mb-2">
+          Welcome back, {user?.firstName || "student"}!
+        </h1>
+        <p className="text-gray-600 dark:text-gray-400">
+          Continue your coding journey and track your progress.
+        </p>
+      </div>
 
-            {/* Stats Grid */}
-            <StatsGrid />
+      {/* Stats Grid */}
+      <StatsGrid />
 
-            {/* Two Column Layout */}
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-              {/* Recent Activity */}
-              <div className="lg:col-span-2">
-                <RecentProblems />
-              </div>
+      {/* Two Column Layout */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+        {/* Recent Activity */}
+        <div className="lg:col-span-2">
+          <RecentProblems />
+        </div>
 
-              {/* Sidebar Content */}
-              <div className="space-y-6">
-                <UpcomingContests />
-                <Leaderboard />
-              </div>
-            </div>
-          </div>
-        </main>
+        {/* Sidebar Content */}
+        <div className="space-y-6">
+          <UpcomingContests />
+          <Leaderboard />
+        </div>
       </div>
 
       {/* Floating Action Buttons */}
@@ -97,4 +57,56 @@ export default function Dashboard() {
       </div>
     </div>
   );
+}
+
+export default function Dashboard() {
+  const [location, setLocation] = useLocation();
+  const { user, isAuthenticated } = useAuth();
+  const { toast } = useToast();
+
+  useEffect(() => {
+    // Handle authentication data from URL parameters (Google OAuth callback)
+    const params = new URLSearchParams(window.location.search);
+    const token = params.get('token');
+    const userStr = params.get('user');
+
+    if (token && userStr) {
+      try {
+        const userData = JSON.parse(decodeURIComponent(userStr));
+        // Store auth data
+        localStorage.setItem('token', token);
+        localStorage.setItem('user', JSON.stringify(userData));
+        
+        // Clean up URL parameters
+        const cleanUrl = window.location.pathname;
+        window.history.replaceState({}, document.title, cleanUrl);
+        
+        // Show success message
+        toast({
+          title: "Successfully signed in",
+          description: `Welcome back${userData.firstName ? ', ' + userData.firstName : ''}!`
+        });
+      } catch (error) {
+        console.error('[DEBUG] Error processing auth data:', error);
+      }
+    }
+  }, []); // Run only once on mount
+
+  useEffect(() => {
+    // Redirect if not authenticated
+    if (!isAuthenticated) {
+      setLocation('/login');
+    }
+  }, [isAuthenticated, setLocation]); // Only depend on isAuthenticated and setLocation
+
+  if (!isAuthenticated || !user) {
+    return null;
+  }
+
+  // Render different dashboards based on user role
+  if (user.role === 'admin') {
+    return <AdminDashboard />;
+  }
+
+  return <UserDashboard user={user} />;
 }

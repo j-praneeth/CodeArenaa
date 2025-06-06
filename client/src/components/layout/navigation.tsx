@@ -12,14 +12,14 @@ import {
 import { Code, Bell, Moon, Sun, LogOut } from "lucide-react";
 
 export function Navigation() {
-  const { user, isAuthenticated } = useAuth();
+  const { user, isAuthenticated, logout } = useAuth();
   const { theme, setTheme } = useTheme();
   const [location] = useLocation();
 
-  if (!isAuthenticated) return null;
+  if (!isAuthenticated || !user) return null;
 
   const navItems = [
-    { path: "/", label: "Dashboard" },
+    { path: "/dashboard", label: "Dashboard" },
     { path: "/problems", label: "Problems" },
     { path: "/contests", label: "Contests" },
     { path: "/courses", label: "Courses" },
@@ -27,7 +27,8 @@ export function Navigation() {
   ];
 
   const isActive = (path: string) => {
-    return location === path || (path !== "/" && location.startsWith(path));
+    if (path === "/dashboard" && location === "/") return true;
+    return location === path || (path !== "/dashboard" && location.startsWith(path));
   };
 
   return (
@@ -36,7 +37,7 @@ export function Navigation() {
         <div className="flex justify-between items-center h-16">
           {/* Logo and Brand */}
           <div className="flex items-center space-x-8">
-            <Link href="/" className="flex items-center space-x-3">
+            <Link href="/dashboard" className="flex items-center space-x-3">
               <div className="w-8 h-8 bg-green-500 rounded-lg flex items-center justify-center">
                 <Code className="text-white h-5 w-5" />
               </div>
@@ -96,10 +97,20 @@ export function Navigation() {
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end">
                 <DropdownMenuItem asChild>
-                  <a href="/api/logout" className="flex items-center">
+                  <Link href="/profile" className="flex items-center">
+                    <LogOut className="mr-2 h-4 w-4" />
+                    Profile
+                  </Link>
+                </DropdownMenuItem>
+                <DropdownMenuItem asChild>
+                  <Link href="/settings" className="flex items-center">
+                    <LogOut className="mr-2 h-4 w-4" />
+                    Settings
+                  </Link>
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={logout}>
                     <LogOut className="mr-2 h-4 w-4" />
                     Log out
-                  </a>
                 </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>

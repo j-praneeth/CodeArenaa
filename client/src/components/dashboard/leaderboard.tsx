@@ -3,11 +3,34 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Link } from "wouter";
+import { config } from "@/config";
+
+interface LeaderboardUser {
+  id: string;
+  firstName?: string;
+  lastName?: string;
+  profileImageUrl?: string;
+}
+
+interface LeaderboardEntry {
+  user: LeaderboardUser;
+  problemsSolved: number;
+  totalScore: number;
+}
 
 export function Leaderboard() {
-  const { data: leaderboard, isLoading } = useQuery({
-    queryKey: ["/api/leaderboard"],
-    retry: false,
+  const { data: leaderboard, isLoading } = useQuery<LeaderboardEntry[]>({
+    queryKey: ["leaderboard"],
+    queryFn: async () => {
+      const res = await fetch(`${config.apiUrl}/api/leaderboard`, {
+        credentials: 'include',
+        headers: {
+          'Authorization': `Bearer ${localStorage.getItem('token')}`,
+        },
+      });
+      if (!res.ok) throw new Error(await res.text());
+      return res.json();
+    },
   });
 
   if (isLoading) {
@@ -54,7 +77,7 @@ export function Leaderboard() {
       </CardHeader>
       <CardContent className="p-6">
         <div className="space-y-3">
-          {leaderboard?.slice(0, 3).map((entry, index) => (
+          {leaderboard && leaderboard.slice(0, 3).map((entry: LeaderboardEntry, index: number) => (
             <div key={entry.user.id} className="flex items-center space-x-3">
               <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold ${getRankBadgeColor(index + 1)}`}>
                 {index + 1}

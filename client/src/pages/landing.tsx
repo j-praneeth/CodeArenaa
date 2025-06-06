@@ -1,6 +1,8 @@
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Code, Trophy, Users, Zap } from "lucide-react";
+import { Link } from "wouter";
+import { ThemeToggle } from "@/components/ui/theme-toggle";
 
 export default function Landing() {
   return (
@@ -14,9 +16,12 @@ export default function Landing() {
             </div>
             <h1 className="text-2xl font-bold text-gray-900 dark:text-white">CodeArena</h1>
           </div>
-          <Button asChild size="lg" className="bg-green-500 hover:bg-green-600 text-white">
-            <a href="/api/login">Get Started</a>
-          </Button>
+          <div className="flex items-center gap-2">
+            <ThemeToggle />
+            <Button asChild size="lg" className="bg-green-500 hover:bg-green-600 text-white">
+              <Link href="/login">Get Started</Link>
+            </Button>
+          </div>
         </div>
       </header>
 
@@ -33,10 +38,10 @@ export default function Landing() {
           </p>
           <div className="flex flex-col sm:flex-row gap-4 justify-center">
             <Button asChild size="lg" className="bg-green-500 hover:bg-green-600 text-white">
-              <a href="/api/login">Start Coding Now</a>
+              <Link href="/login">Start Coding Now</Link>
             </Button>
-            <Button variant="outline" size="lg">
-              View Problems
+            <Button asChild variant="outline" size="lg">
+              <Link href="/problems">View Problems</Link>
             </Button>
           </div>
         </div>
@@ -118,7 +123,7 @@ export default function Landing() {
             Join CodeArena today and start your journey to becoming a better programmer.
           </p>
           <Button asChild size="lg" variant="secondary">
-            <a href="/api/login">Sign Up Free</a>
+            <Link href="/register">Sign Up Free</Link>
           </Button>
         </div>
       </section>

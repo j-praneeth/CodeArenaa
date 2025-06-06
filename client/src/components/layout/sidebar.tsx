@@ -8,16 +8,20 @@ import {
   ClipboardList 
 } from "lucide-react";
 import { Progress } from "@/components/ui/progress";
+import { useAuth } from "@/hooks/useAuth";
 
 export function Sidebar() {
   const [location] = useLocation();
+  const { user, isAuthenticated } = useAuth();
+
+  if (!isAuthenticated || !user) return null;
 
   const { data: userStats } = useQuery({
     queryKey: ["/api/users/me/stats"],
   });
 
   const sidebarItems = [
-    { path: "/", icon: LayoutDashboard, label: "Dashboard" },
+    { path: "/dashboard", icon: LayoutDashboard, label: "Dashboard" },
     { path: "/problems", icon: Code, label: "Practice Problems" },
     { path: "/contests", icon: Trophy, label: "Contests" },
     { path: "/courses", icon: GraduationCap, label: "Courses" },
@@ -25,7 +29,8 @@ export function Sidebar() {
   ];
 
   const isActive = (path: string) => {
-    return location === path || (path !== "/" && location.startsWith(path));
+    if (path === "/dashboard" && location === "/") return true;
+    return location === path || (path !== "/dashboard" && location.startsWith(path));
   };
 
   const problemsProgress = userStats ? (userStats.accepted / 120) * 100 : 0;
