@@ -88,7 +88,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.get('/api/problems/:id', async (req, res) => {
+  app.get('/api/problems/:id', isAuthenticated, async (req, res) => {
     try {
       const id = parseInt(req.params.id);
       const problem = await storage.getProblem(id);
@@ -102,13 +102,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post('/api/problems', isAuthenticated, async (req: any, res) => {
+  app.post('/api/problems', isAuthenticated, requireAdmin, async (req: any, res) => {
     try {
-      const userId = req.user.claims.sub;
-      const user = await storage.getUser(userId);
-      
-      if (user?.role !== 'admin') {
-        return res.status(403).json({ message: "Only admins can create problems" });
+      const userId = req.user.sub || req.user.claims?.sub || req.user.id;
+      if (!userId) {
+        console.error('[DEBUG] No user ID found in request:', req.user);
+        return res.status(401).json({ message: "User ID not found" });
       }
 
       const validatedData = insertProblemSchema.parse({
@@ -127,10 +126,80 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Add PUT endpoint for updating problems
+  app.put('/api/problems/:id', isAuthenticated, requireAdmin, async (req: any, res) => {
+    try {
+      const problemId = parseInt(req.params.id);
+      const userId = req.user.sub || req.user.claims?.sub || req.user.id;
+      
+      if (!userId) {
+        console.error('[DEBUG] No user ID found in request:', req.user);
+        return res.status(401).json({ message: "User ID not found" });
+      }
+
+      // First check if the problem exists
+      const existingProblem = await storage.getProblem(problemId);
+      if (!existingProblem) {
+        return res.status(404).json({ message: "Problem not found" });
+      }
+
+      // Validate the update data
+      const validatedData = insertProblemSchema.parse({
+        ...req.body,
+        updatedBy: userId,
+        updatedAt: new Date()
+      });
+
+      console.log('[DEBUG] Updating problem:', { problemId, data: validatedData });
+      
+      // Update the problem
+      const updatedProblem = await storage.updateProblem(problemId, validatedData);
+      if (!updatedProblem) {
+        return res.status(404).json({ message: "Problem not found" });
+      }
+
+      console.log('[DEBUG] Problem updated successfully:', updatedProblem);
+      res.json(updatedProblem);
+    } catch (error) {
+      console.error('[DEBUG] Error updating problem:', error);
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ message: "Invalid data", errors: error.errors });
+      }
+      res.status(500).json({ message: "Failed to update problem" });
+    }
+  });
+
+  // Add DELETE endpoint for problems
+  app.delete('/api/problems/:id', isAuthenticated, requireAdmin, async (req: any, res) => {
+    try {
+      const problemId = parseInt(req.params.id);
+      
+      // First check if the problem exists
+      const existingProblem = await storage.getProblem(problemId);
+      if (!existingProblem) {
+        return res.status(404).json({ message: "Problem not found" });
+      }
+
+      console.log('[DEBUG] Deleting problem:', problemId);
+      
+      // Delete the problem
+      await storage.deleteProblem(problemId);
+      res.status(204).send();
+    } catch (error) {
+      console.error('[DEBUG] Error deleting problem:', error);
+      res.status(500).json({ message: "Failed to delete problem" });
+    }
+  });
+
   // Submission routes
   app.get('/api/submissions', isAuthenticated, async (req: any, res) => {
     try {
-      const userId = req.user.claims.sub;
+      const userId = req.user.sub || req.user.claims?.sub || req.user.id;
+      if (!userId) {
+        console.error('[DEBUG] No user ID found in request:', req.user);
+        return res.status(401).json({ message: "User ID not found" });
+      }
+
       const problemId = req.query.problemId ? parseInt(req.query.problemId as string) : undefined;
       
       const submissions = await storage.getSubmissions(userId, problemId);
@@ -143,10 +212,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.post('/api/submissions', isAuthenticated, async (req: any, res) => {
     try {
-      const userId = req.user.claims.sub;
+      const userId = req.user.sub || req.user.claims?.sub || req.user.id;
+      if (!userId) {
+        console.error('[DEBUG] No user ID found in request:', req.user);
+        return res.status(401).json({ message: "User ID not found" });
+      }
+
+      const { isTest, ...submissionData } = req.body;
       
       const validatedData = insertSubmissionSchema.parse({
-        ...req.body,
+        ...submissionData,
         userId,
         status: 'pending',
         submittedAt: new Date(),
@@ -154,11 +229,29 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       // Mock code execution - replace with actual judge system
       const mockResult = mockExecuteCode(validatedData.code, validatedData.language);
+      
+      if (isTest) {
+        // For test runs, return results immediately without saving to database
+        return res.json({ 
+          results: [{
+            passed: mockResult.status === 'accepted',
+            input: mockResult.input,
+            output: mockResult.actualOutput,
+            expectedOutput: mockResult.expectedOutput,
+            isHidden: false,
+            error: mockResult.error,
+            runtime: mockResult.runtime,
+            memory: mockResult.memory
+          }]
+        });
+      }
+
+      // For actual submissions, save to database
       validatedData.status = mockResult.status;
       validatedData.runtime = mockResult.runtime;
       validatedData.memory = mockResult.memory;
       validatedData.score = mockResult.score;
-      validatedData.feedback = mockResult.feedback;
+      validatedData.feedback = mockResult.error || 'Solution accepted';
       
       const submission = await storage.createSubmission(validatedData);
       res.status(201).json(submission);
@@ -172,21 +265,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // User stats route
-  app.get('/api/users/:id/stats', isAuthenticated, async (req: any, res) => {
+  app.get('/api/users/me/stats', isAuthenticated, async (req: any, res) => {
     try {
-      const userId = req.params.id === 'me' ? req.user.claims.sub : req.params.id;
-      const currentUserId = req.user.claims.sub;
-      
-      // Users can only view their own stats unless they're admin
-      const currentUser = await storage.getUser(currentUserId);
-      if (userId !== currentUserId && currentUser?.role !== 'admin') {
-        return res.status(403).json({ message: "Unauthorized" });
+      const userId = req.user.sub || req.user.claims?.sub || req.user.id;
+      if (!userId) {
+        console.error('[DEBUG] No user ID found in request:', req.user);
+        return res.status(401).json({ message: "User ID not found" });
       }
-      
+
       const stats = await storage.getUserSubmissionStats(userId);
-      const progress = await storage.getUserProgress(userId);
-      
-      res.json({ ...stats, progress });
+      res.json(stats);
     } catch (error) {
       console.error("Error fetching user stats:", error);
       res.status(500).json({ message: "Failed to fetch user stats" });
@@ -496,21 +584,69 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
 // Mock code execution function - replace with actual judge system
 function mockExecuteCode(code: string, language: string) {
-  // Mock execution results
-  const results = {
-    wrong_answer: "Your solution produced incorrect output",
-    time_limit_exceeded: "Your solution took too long to execute",
-    runtime_error: "Your solution encountered a runtime error"
-  };
+  // Mock test cases
+  const testCases = [
+    {
+      input: "nums = [2, 7, 11, 15], target = 9",
+      expectedOutput: "[0, 1]",
+      actualOutput: "[1, 0]" // simulated user's output
+    }
+  ];
 
-  // Mock execution logic
-  const status = Math.random() > 0.5 ? 'accepted' : 'wrong_answer';
+  // Simulate code execution for each test case
+  const testCase = testCases[0]; // Using first test case for now
+  
+  // Simulate different execution scenarios
+  const scenarios = [
+    {
+      status: 'wrong_answer',
+      runtime: 100,
+      memory: 16,
+      score: "0.00",
+      actualOutput: testCase.actualOutput,
+      expectedOutput: testCase.expectedOutput,
+      error: null
+    },
+    {
+      status: 'time_limit_exceeded',
+      runtime: 2000,
+      memory: 16,
+      score: "0.00",
+      actualOutput: "Function took too long to execute",
+      expectedOutput: testCase.expectedOutput,
+      error: "Time limit exceeded: Function took longer than 1000ms to execute"
+    },
+    {
+      status: 'runtime_error',
+      runtime: 50,
+      memory: 16,
+      score: "0.00",
+      actualOutput: null,
+      expectedOutput: testCase.expectedOutput,
+      error: "TypeError: Cannot read property 'length' of undefined"
+    },
+    {
+      status: 'accepted',
+      runtime: 95,
+      memory: 16,
+      score: "100.00",
+      actualOutput: testCase.expectedOutput,
+      expectedOutput: testCase.expectedOutput,
+      error: null
+    }
+  ];
+
+  // Randomly select a scenario (for testing purposes)
+  const result = scenarios[Math.floor(Math.random() * scenarios.length)];
   
   return {
-    status,
-    runtime: Math.floor(Math.random() * 1000),
-    memory: Math.floor(Math.random() * 50000),
-    score: status === 'accepted' ? "100.00" : "0.00",
-    feedback: status === 'accepted' ? "All test cases passed!" : results['wrong_answer'] as string
+    status: result.status,
+    runtime: result.runtime,
+    memory: result.memory,
+    score: result.score,
+    actualOutput: result.actualOutput,
+    expectedOutput: result.expectedOutput,
+    error: result.error,
+    input: testCase.input
   };
 }
