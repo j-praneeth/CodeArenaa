@@ -3,13 +3,44 @@ import { useParams } from "wouter";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
-import { Layout } from "@/components/Layout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { CodeEditor } from "@/components/CodeEditor";
 import { Play, Send, CheckCircle, XCircle, Clock } from "lucide-react";
+import { Navbar } from "@/components/Navbar";
+
+interface Problem {
+  id: number;
+  title: string;
+  description: string;
+  difficulty: string;
+  category: string;
+  tags: string[];
+  constraints: string;
+  inputFormat: string;
+  outputFormat: string;
+  examples: {
+    input: string;
+    output: string;
+    explanation?: string;
+  }[];
+  starterCode: {
+    python?: string;
+    javascript?: string;
+    cpp?: string;
+  };
+}
+
+interface Submission {
+  id: number;
+  status: string;
+  language: string;
+  submittedAt: string;
+  runtime?: number;
+  memory?: number;
+}
 
 export default function ProblemDetail() {
   const { id } = useParams();
@@ -20,25 +51,41 @@ export default function ProblemDetail() {
     # Write your solution here
     pass`);
 
-  const { data: problem, isLoading } = useQuery({
+  const { data: problem, isLoading } = useQuery<Problem>({
     queryKey: [`/api/problems/${id}`],
+    queryFn: async () => {
+      const response = await apiRequest("GET", `/api/problems/${id}`);
+      if (!response) throw new Error("Problem not found");
+      const data = await response.json();
+      return data as Problem;
+    },
     retry: false,
   });
 
-  const { data: submissions } = useQuery({
+  const { data: submissions } = useQuery<Submission[]>({
     queryKey: ["/api/submissions", { problemId: parseInt(id || "0") }],
+    queryFn: async () => {
+      const response = await apiRequest("GET", `/api/submissions?problemId=${parseInt(id || "0")}`);
+      if (!response) return [];
+      const data = await response.json();
+      return data as Submission[];
+    },
     retry: false,
   });
 
   const runCodeMutation = useMutation({
     mutationFn: async () => {
-      // Mock code execution
-      await new Promise(resolve => setTimeout(resolve, 1000));
-      return {
-        status: "success",
-        output: "Test case 1: Passed\nTest case 2: Passed\nTest case 3: Passed",
-        runtime: Math.floor(Math.random() * 100) + 50,
-        memory: Math.floor(Math.random() * 20) + 10,
+      const response = await apiRequest("POST", "/api/problems/run", {
+        problemId: parseInt(id || "0"),
+        code,
+        language: selectedLanguage,
+      });
+      const data = await response.json();
+      return data as {
+        status: string;
+        output: string;
+        runtime: number;
+        memory: number;
       };
     },
     onSuccess: (result) => {
@@ -47,7 +94,7 @@ export default function ProblemDetail() {
         description: `Runtime: ${result.runtime}ms, Memory: ${result.memory}MB`,
       });
     },
-    onError: () => {
+    onError: (error: Error) => {
       toast({
         title: "Execution failed",
         description: "There was an error running your code.",
@@ -58,11 +105,13 @@ export default function ProblemDetail() {
 
   const submitCodeMutation = useMutation({
     mutationFn: async () => {
-      return await apiRequest("POST", "/api/submissions", {
+      const response = await apiRequest("POST", "/api/submissions", {
         problemId: parseInt(id || "0"),
         code,
         language: selectedLanguage,
       });
+      const data = await response.json();
+      return data as Submission;
     },
     onSuccess: () => {
       toast({
@@ -71,7 +120,7 @@ export default function ProblemDetail() {
       });
       queryClient.invalidateQueries({ queryKey: ["/api/submissions"] });
     },
-    onError: (error) => {
+    onError: (error: Error) => {
       toast({
         title: "Submission failed",
         description: error.message,
@@ -123,6 +172,12 @@ export default function ProblemDetail() {
           <div className="text-center">
             <h1 className="text-2xl font-bold text-slate-900 dark:text-slate-100 mb-2">Problem Not Found</h1>
             <p className="text-slate-600 dark:text-slate-400">The problem you're looking for doesn't exist.</p>
+            <Button 
+              className="mt-4"
+              onClick={() => window.location.href = "/problems"}
+            >
+              Back to Problems
+            </Button>
           </div>
         </div>
       </div>
@@ -149,7 +204,7 @@ export default function ProblemDetail() {
                 {problem.tags && (
                   <>
                     <span>•</span>
-                    <span>{Array.isArray(problem.tags) ? problem.tags.join(', ') : problem.tags}</span>
+                    <span>{problem.tags.join(', ')}</span>
                   </>
                 )}
               </div>
@@ -164,7 +219,7 @@ export default function ProblemDetail() {
               {problem.examples && Array.isArray(problem.examples) && (
                 <div className="mb-6">
                   <h4 className="font-semibold mb-3">Examples:</h4>
-                  {problem.examples.map((example: any, index: number) => (
+                  {problem.examples.map((example, index) => (
                     <div key={index} className="bg-slate-100 dark:bg-slate-800 p-4 rounded-lg mb-4 font-mono text-sm">
                       <div><strong>Input:</strong> {example.input}</div>
                       <div><strong>Output:</strong> {example.output}</div>
@@ -194,7 +249,7 @@ export default function ProblemDetail() {
                 </CardHeader>
                 <CardContent>
                   <div className="space-y-3">
-                    {submissions.slice(0, 5).map((submission: any) => (
+                    {submissions.slice(0, 5).map((submission) => (
                       <div key={submission.id} className="flex items-center justify-between p-3 bg-slate-50 dark:bg-slate-800 rounded-lg">
                         <div className="flex items-center space-x-3">
                           {getStatusIcon(submission.status)}
