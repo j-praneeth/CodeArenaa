@@ -33,7 +33,7 @@ import {
   MessageSquare,
   UsersIcon
 } from "lucide-react";
-import { useState, useCallback, useEffect } from "react";
+import { useState, useCallback, useEffect, useMemo } from "react";
 import type { User, Assignment, Group, Announcement } from "@/shared/schema";
 import { config } from "@/config";
 
@@ -85,6 +85,16 @@ export default function AdminDashboard() {
   const [showCreateGroup, setShowCreateGroup] = useState(false);
   const [showCreateAnnouncement, setShowCreateAnnouncement] = useState(false);
 
+  // Memoize token and fetch options to prevent recreation on every render
+  const token = useMemo(() => localStorage.getItem('token'), []);
+  const fetchOptions = useMemo(() => ({
+    credentials: 'include' as const,
+    headers: {
+      'Authorization': `Bearer ${token}`,
+      'Content-Type': 'application/json',
+    },
+  }), [token]);
+
   useEffect(() => {
     // Handle authentication data from URL parameters (Google OAuth callback)
     const params = new URLSearchParams(window.location.search);
@@ -113,28 +123,22 @@ export default function AdminDashboard() {
     }
   }, []); // Run only once on mount
 
+  // Memoize the auth check to prevent unnecessary redirects
+  const shouldRedirect = useMemo(() => 
+    !isAuthenticated || user?.role !== 'admin',
+    [isAuthenticated, user?.role]
+  );
+
   useEffect(() => {
-    // Redirect if not authenticated or not admin
-    if (!isAuthenticated || user?.role !== 'admin') {
+    if (shouldRedirect) {
       setLocation('/dashboard');
     }
-  }, [isAuthenticated, user, setLocation]); // Only depend on auth state and navigation
+  }, [shouldRedirect, setLocation]);
 
-  if (!isAuthenticated || !user || user.role !== 'admin') {
+  // Early return if not authenticated or not admin
+  if (shouldRedirect) {
     return null;
   }
-
-  // Get token once and store it
-  const token = localStorage.getItem('token');
-  
-  // Common fetch options
-  const fetchOptions = {
-    credentials: 'include' as const,
-    headers: {
-      'Authorization': `Bearer ${token}`,
-      'Content-Type': 'application/json',
-    },
-  };
 
   // Queries with proper configuration and error handling
   const { data: analytics, isLoading: analyticsLoading } = useQuery({
@@ -149,6 +153,7 @@ export default function AdminDashboard() {
     },
     retry: false,
     enabled: !!token && isAuthenticated,
+    staleTime: 30000, // Add staleTime to prevent frequent refetches
   });
 
   const { data: users, isLoading: usersLoading } = useQuery({
@@ -163,6 +168,7 @@ export default function AdminDashboard() {
     },
     retry: false,
     enabled: !!token && isAuthenticated,
+    staleTime: 30000, // Add staleTime to prevent frequent refetches
   });
 
   const { data: assignments, isLoading: assignmentsLoading } = useQuery({
@@ -177,6 +183,7 @@ export default function AdminDashboard() {
     },
     retry: false,
     enabled: !!token && isAuthenticated,
+    staleTime: 30000, // Add staleTime to prevent frequent refetches
   });
 
   const { data: groups, isLoading: groupsLoading } = useQuery({
@@ -191,6 +198,7 @@ export default function AdminDashboard() {
     },
     retry: false,
     enabled: !!token && isAuthenticated,
+    staleTime: 30000, // Add staleTime to prevent frequent refetches
   });
 
   const { data: announcements, isLoading: announcementsLoading } = useQuery({
@@ -205,6 +213,7 @@ export default function AdminDashboard() {
     },
     retry: false,
     enabled: !!token && isAuthenticated,
+    staleTime: 30000, // Add staleTime to prevent frequent refetches
   });
 
   const { data: problems } = useQuery({
@@ -219,6 +228,7 @@ export default function AdminDashboard() {
     },
     retry: false,
     enabled: !!token && isAuthenticated,
+    staleTime: 30000, // Add staleTime to prevent frequent refetches
   });
 
   // Mutations with proper error handling
@@ -235,13 +245,13 @@ export default function AdminDashboard() {
       }
       return res.json();
     },
-    onSuccess: () => {
+    onSuccess: useCallback(() => {
       queryClient.invalidateQueries({ queryKey: ["admin", "users"] });
       toast({ title: "Success", description: "User role updated successfully" });
-    },
-    onError: (error: Error) => {
+    }, [queryClient, toast]),
+    onError: useCallback((error: Error) => {
       toast({ title: "Error", description: error.message, variant: "destructive" });
-    },
+    }, [toast]),
   });
 
   const createAssignmentMutation = useMutation({
@@ -250,7 +260,7 @@ export default function AdminDashboard() {
         method: "POST",
         headers: { 
           "Content-Type": "application/json",
-          'Authorization': `Bearer ${localStorage.getItem('token')}`,
+          'Authorization': `Bearer ${token}`,
         },
         credentials: 'include',
         body: JSON.stringify(data),
@@ -258,14 +268,14 @@ export default function AdminDashboard() {
       if (!res.ok) throw new Error(await res.text());
       return res.json();
     },
-    onSuccess: () => {
+    onSuccess: useCallback(() => {
       queryClient.invalidateQueries({ queryKey: ["admin", "assignments"] });
       setShowCreateAssignment(false);
       toast({ title: "Success", description: "Assignment created successfully" });
-    },
-    onError: (error: Error) => {
+    }, [queryClient, setShowCreateAssignment, toast]),
+    onError: useCallback((error: Error) => {
       toast({ title: "Error", description: error.message, variant: "destructive" });
-    },
+    }, [toast]),
   });
 
   const createGroupMutation = useMutation({
@@ -274,7 +284,7 @@ export default function AdminDashboard() {
         method: "POST",
         headers: { 
           "Content-Type": "application/json",
-          'Authorization': `Bearer ${localStorage.getItem('token')}`,
+          'Authorization': `Bearer ${token}`,
         },
         credentials: 'include',
         body: JSON.stringify(data),
@@ -282,14 +292,14 @@ export default function AdminDashboard() {
       if (!res.ok) throw new Error(await res.text());
       return res.json();
     },
-    onSuccess: () => {
+    onSuccess: useCallback(() => {
       queryClient.invalidateQueries({ queryKey: ["admin", "groups"] });
       setShowCreateGroup(false);
       toast({ title: "Success", description: "Group created successfully" });
-    },
-    onError: (error: Error) => {
+    }, [queryClient, setShowCreateGroup, toast]),
+    onError: useCallback((error: Error) => {
       toast({ title: "Error", description: error.message, variant: "destructive" });
-    },
+    }, [toast]),
   });
 
   const createAnnouncementMutation = useMutation({
@@ -298,7 +308,7 @@ export default function AdminDashboard() {
         method: "POST",
         headers: { 
           "Content-Type": "application/json",
-          'Authorization': `Bearer ${localStorage.getItem('token')}`,
+          'Authorization': `Bearer ${token}`,
         },
         credentials: 'include',
         body: JSON.stringify(data),
@@ -306,14 +316,14 @@ export default function AdminDashboard() {
       if (!res.ok) throw new Error(await res.text());
       return res.json();
     },
-    onSuccess: () => {
+    onSuccess: useCallback(() => {
       queryClient.invalidateQueries({ queryKey: ["admin", "announcements"] });
       setShowCreateAnnouncement(false);
       toast({ title: "Success", description: "Announcement created successfully" });
-    },
-    onError: (error: Error) => {
+    }, [queryClient, setShowCreateAnnouncement, toast]),
+    onError: useCallback((error: Error) => {
       toast({ title: "Error", description: error.message, variant: "destructive" });
-    },
+    }, [toast]),
   });
 
   // Forms
@@ -532,12 +542,12 @@ export default function AdminDashboard() {
                             value={user.role || 'student'}
                             onValueChange={(role) => handleUpdateUserRole(user.id, role)}
                           >
-                            <SelectTrigger className="w-32">
+                            <SelectTrigger key={`trigger-${user.id}`} className="w-32">
                               <SelectValue />
                             </SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value="student">Student</SelectItem>
-                              <SelectItem value="admin">Admin</SelectItem>
+                            <SelectContent key={`content-${user.id}`}>
+                              <SelectItem key={`student-${user.id}`} value="student">Student</SelectItem>
+                              <SelectItem key={`admin-${user.id}`} value="admin">Admin</SelectItem>
                             </SelectContent>
                           </Select>
                         </TableCell>
