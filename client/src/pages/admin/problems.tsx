@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -13,23 +13,54 @@ import { useForm } from "react-hook-form";
 import { Plus, Search, Filter, Edit, Trash2 } from "lucide-react";
 import * as z from "zod";
 import { useToast } from "@/hooks/use-toast";
+import { useAuth } from "@/hooks/useAuth";
+import { useLocation } from "wouter";
+import { config } from "@/config";
 
 interface Problem {
   id: number;
   title: string;
   description: string;
-  difficulty: string;
+  difficulty: 'easy' | 'medium' | 'hard';
   tags: string[];
-  testCases: TestCase[];
+  constraints?: string;
+  inputFormat: string;
+  outputFormat: string;
+  examples: Array<{
+    input: string;
+    output: string;
+    explanation?: string;
+  }>;
+  testCases: Array<{
+    input: string;
+    expectedOutput: string;
+    isHidden: boolean;
+    timeLimit?: number;
+    memoryLimit?: number;
+    explanation?: string;
+  }>;
+  timeLimit: number;
+  memoryLimit: number;
+  starterCode: {
+    python?: string;
+    c?: string;
+    java?: string;
+    cpp?: string;
+  };
+  notes?: string;
+  difficulty_rating?: number;
 }
 
 interface TestCase {
   input: string;
   expectedOutput: string;
   isHidden: boolean;
+  timeLimit?: number;
+  memoryLimit?: number;
+  explanation?: string;
 }
 
-const LANGUAGES = ["python", "javascript", "java", "cpp"] as const;
+const LANGUAGES = ["python", "c", "java", "cpp"] as const;
 
 const problemSchema = z.object({
   title: z.string().min(1, "Title is required"),
@@ -56,7 +87,7 @@ const problemSchema = z.object({
   memoryLimit: z.number().min(16, "Memory limit must be at least 16MB"),
   starterCode: z.object({
     python: z.string().optional(),
-    javascript: z.string().optional(),
+    c: z.string().optional(),
     java: z.string().optional(),
     cpp: z.string().optional()
   }),
@@ -66,10 +97,44 @@ const problemSchema = z.object({
 
 export default function AdminProblems() {
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
+  const [editingProblem, setEditingProblem] = useState<Problem | null>(null);
   const [searchTerm, setSearchTerm] = useState("");
   const [difficultyFilter, setDifficultyFilter] = useState("all");
   const { toast } = useToast();
   const queryClient = useQueryClient();
+  const { user, isAuthenticated } = useAuth();
+  const [location, setLocation] = useLocation();
+  const [selectedTab, setSelectedTab] = useState("overview");
+  const [showCreateAssignment, setShowCreateAssignment] = useState(false);
+  const [showCreateGroup, setShowCreateGroup] = useState(false);
+  const [showCreateAnnouncement, setShowCreateAnnouncement] = useState(false);
+
+  // Memoize token and fetch options to prevent recreation on every render
+  const token = useMemo(() => localStorage.getItem('token'), []);
+  const fetchOptions = useMemo(() => ({
+    credentials: 'include' as const,
+    headers: {
+      'Authorization': `Bearer ${token}`,
+      'Content-Type': 'application/json',
+    },
+  }), [token]);
+
+  // Redirect if not admin
+  useEffect(() => {
+    if (!isAuthenticated || user?.role !== 'admin') {
+      toast({
+        title: "Access Denied",
+        description: "You must be an admin to access this page.",
+        variant: "destructive",
+      });
+      setLocation('/problems');
+    }
+  }, [isAuthenticated, user, setLocation, toast]);
+
+  // Early return if not authenticated or not admin
+  if (!isAuthenticated || !user || user.role !== 'admin') {
+    return null;
+  }
 
   const form = useForm<z.infer<typeof problemSchema>>({
     resolver: zodResolver(problemSchema),
@@ -91,14 +156,14 @@ export default function AdminProblems() {
         expectedOutput: "",
         explanation: "",
         isHidden: false,
-        timeLimit: undefined,
-        memoryLimit: undefined
+        timeLimit: 1000,
+        memoryLimit: 256
       }],
       timeLimit: 1000,
       memoryLimit: 256,
       starterCode: {
         python: "def solution():\n    pass",
-        javascript: "function solution() {\n}",
+        c: "#include <stdio.h>\n\nint main() {\n    // Your solution here\n    return 0;\n}",
         java: "public class Solution {\n    public void solution() {\n    }\n}",
         cpp: "#include <iostream>\nusing namespace std;\n\nint main() {\n    return 0;\n}"
       },
@@ -109,66 +174,76 @@ export default function AdminProblems() {
 
   const { data: problems, isLoading } = useQuery<Problem[]>({
     queryKey: ["/api/problems"],
+    queryFn: async () => {
+      const res = await fetch(`${config.apiUrl}/api/problems`, fetchOptions);
+      if (!res.ok) {
+        const error = await res.text();
+        throw new Error(error);
+      }
+      return res.json() as Promise<Problem[]>;
+    },
     retry: false,
+    enabled: !!token && isAuthenticated && user.role === 'admin',
+    staleTime: 30000,
   });
 
   const createProblemMutation = useMutation({
     mutationFn: async (data: z.infer<typeof problemSchema>) => {
-      // Format the data to match backend expectations
       const formattedData = {
         ...data,
-        tags: data.tags.filter(tag => tag.trim() !== ""), // Remove empty tags
-        isPublic: true, // Set default value
+        tags: data.tags.filter(tag => tag.trim() !== ""),
+        isPublic: true,
         examples: data.examples.map(example => ({
-          ...example,
-          explanation: example.explanation || "" // Ensure explanation is never undefined
+          input: example.input.trim(),
+          output: example.output.trim(),
+          explanation: example.explanation?.trim() || ""
         })),
         testCases: data.testCases.map(testCase => ({
-          ...testCase,
-          explanation: testCase.explanation || "", // Ensure explanation is never undefined
+          input: testCase.input.trim(),
+          expectedOutput: testCase.expectedOutput.trim(),
+          explanation: testCase.explanation?.trim() || "",
+          isHidden: testCase.isHidden,
           timeLimit: testCase.timeLimit || data.timeLimit,
           memoryLimit: testCase.memoryLimit || data.memoryLimit
-        }))
+        })),
+        starterCode: {
+          python: data.starterCode.python?.trim() || "",
+          c: data.starterCode.c?.trim() || "",
+          java: data.starterCode.java?.trim() || "",
+          cpp: data.starterCode.cpp?.trim() || ""
+        },
+        constraints: data.constraints?.trim() || "",
+        inputFormat: data.inputFormat.trim(),
+        outputFormat: data.outputFormat.trim(),
+        notes: data.notes?.trim() || "",
+        difficulty_rating: data.difficulty_rating || 1,
+        timeLimit: data.timeLimit,
+        memoryLimit: data.memoryLimit
       };
 
       try {
-        const response = await fetch("/api/problems", {
+        const response = await fetch(`${config.apiUrl}/api/problems`, {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
-            "Accept": "application/json"
+            "Accept": "application/json",
+            "Authorization": `Bearer ${token}`
           },
           body: JSON.stringify(formattedData),
-          credentials: 'include' // Ensure cookies are sent
+          credentials: 'include'
         });
 
-        // First check if response is ok
         if (!response.ok) {
-          // Try to get the content type
           const contentType = response.headers.get("content-type");
-          
           if (contentType && contentType.includes("application/json")) {
-            // If it's JSON, parse the error
             const errorData = await response.json();
             throw new Error(errorData.message || "Failed to create problem");
           } else {
-            // If it's not JSON, get the text and check for specific errors
-            const text = await response.text();
-            console.error("Non-JSON response:", text);
-            
-            if (response.status === 401) {
-              throw new Error("You are not authenticated. Please log in again.");
-            } else if (response.status === 403) {
-              throw new Error("You don't have permission to create problems.");
-            } else {
-              throw new Error(`Server error (${response.status}). Please try again.`);
+            throw new Error(`Failed to create problem (${response.status})`);
             }
           }
-        }
 
-        // If response is ok, parse the JSON
-        const result = await response.json();
-        return result;
+        return response.json();
       } catch (error) {
         console.error("Problem creation error details:", error);
         if (error instanceof Error) {
@@ -189,46 +264,138 @@ export default function AdminProblems() {
     },
     onError: (error: Error) => {
       console.error("Problem creation error:", error);
-      
-      // Check for specific error messages
-      if (error.message.includes("not authenticated")) {
         toast({
-          title: "Authentication Error",
-          description: "Please log in again to continue.",
+        title: "Error",
+        description: error.message || "Failed to create problem",
           variant: "destructive",
         });
-        // Optionally redirect to login
-        window.location.href = "/login";
-        return;
+    },
+  });
+
+  const updateProblemMutation = useMutation({
+    mutationFn: async (data: z.infer<typeof problemSchema> & { id: number }) => {
+      const { id, ...problemData } = data;
+      const formattedData = {
+        ...problemData,
+        tags: problemData.tags.filter(tag => tag.trim() !== ""),
+        isPublic: true,
+        examples: problemData.examples.map(example => ({
+          input: example.input.trim(),
+          output: example.output.trim(),
+          explanation: example.explanation?.trim() || ""
+        })),
+        testCases: problemData.testCases.map(testCase => ({
+          input: testCase.input.trim(),
+          expectedOutput: testCase.expectedOutput.trim(),
+          explanation: testCase.explanation?.trim() || "",
+          isHidden: testCase.isHidden,
+          timeLimit: testCase.timeLimit || problemData.timeLimit,
+          memoryLimit: testCase.memoryLimit || problemData.memoryLimit
+        })),
+        starterCode: {
+          python: problemData.starterCode?.python?.trim() || "",
+          c: problemData.starterCode?.c?.trim() || "",
+          java: problemData.starterCode?.java?.trim() || "",
+          cpp: problemData.starterCode?.cpp?.trim() || ""
+        },
+        constraints: problemData.constraints?.trim() || "",
+        inputFormat: problemData.inputFormat.trim(),
+        outputFormat: problemData.outputFormat.trim(),
+        notes: problemData.notes?.trim() || "",
+        difficulty_rating: problemData.difficulty_rating || 1,
+        timeLimit: problemData.timeLimit,
+        memoryLimit: problemData.memoryLimit
+      };
+
+      console.log('[DEBUG] Updating problem:', { id, data: formattedData });
+
+      const response = await fetch(`${config.apiUrl}/api/problems/${id}`, {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+          "Accept": "application/json",
+          "Authorization": `Bearer ${token}`
+        },
+        body: JSON.stringify(formattedData),
+        credentials: 'include'
+      });
+
+      if (!response.ok) {
+        const contentType = response.headers.get("content-type");
+        if (contentType && contentType.includes("application/json")) {
+          const errorData = await response.json();
+          throw new Error(errorData.message || `Failed to update problem (${response.status})`);
+        } else {
+          throw new Error(`Failed to update problem (${response.status})`);
+        }
       }
-      
+
+      const result = await response.json();
+      console.log('[DEBUG] Problem updated successfully:', result);
+      return result;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/problems"] });
+      setIsCreateDialogOpen(false);
+      setEditingProblem(null);
+      form.reset();
+      toast({
+        title: "Success",
+        description: "Problem updated successfully",
+      });
+    },
+    onError: (error: Error) => {
+      console.error("Problem update error:", error);
       toast({
         title: "Error",
-        description: error.message || "Failed to create problem. Please try again.",
+        description: error.message || "Failed to update problem",
         variant: "destructive",
       });
-      // Keep the dialog open so user can fix the error
     },
   });
 
   const deleteProblemMutation = useMutation({
     mutationFn: async (id: number) => {
-      const response = await fetch(`/api/admin/problems/${id}`, {
+      const response = await fetch(`${config.apiUrl}/api/problems/${id}`, {
         method: "DELETE",
+        headers: {
+          "Authorization": `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
+        credentials: 'include'
       });
-      if (!response.ok) throw new Error("Failed to delete problem");
+
+      if (!response.ok) {
+        const contentType = response.headers.get("content-type");
+        if (contentType && contentType.includes("application/json")) {
+          const errorData = await response.json();
+          throw new Error(errorData.message || "Failed to delete problem");
+        } else {
+          throw new Error(`Failed to delete problem (${response.status})`);
+        }
+      }
+
+      // Check if there's actually content to parse
+      const contentType = response.headers.get("content-type");
+      if (contentType && contentType.includes("application/json")) {
+        return response.json();
+      }
+      
+      // If no content or not JSON, just return success status
+      return { success: true };
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/admin/problems"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/problems"] });
       toast({
         title: "Success",
         description: "Problem deleted successfully",
       });
     },
-    onError: (error) => {
+    onError: (error: Error) => {
+      console.error("Problem deletion error:", error);
       toast({
         title: "Error",
-        description: "Failed to delete problem: " + error.message,
+        description: error.message || "Failed to delete problem",
         variant: "destructive",
       });
     },
@@ -236,7 +403,7 @@ export default function AdminProblems() {
 
   const onSubmit = async (data: z.infer<typeof problemSchema>) => {
     try {
-      // Additional validation before submission
+      // Validate required fields
       if (!data.title.trim()) {
         toast({
           title: "Validation Error",
@@ -255,7 +422,7 @@ export default function AdminProblems() {
         return;
       }
 
-      if (!data.inputFormat.trim() || !data.outputFormat.trim()) {
+      if (!data.inputFormat?.trim() || !data.outputFormat?.trim()) {
         toast({
           title: "Validation Error",
           description: "Input and output formats are required",
@@ -264,48 +431,30 @@ export default function AdminProblems() {
         return;
       }
 
-      if (data.examples.length === 0) {
-        toast({
-          title: "Validation Error",
-          description: "At least one example is required",
-          variant: "destructive",
-        });
-        return;
-      }
-
-      if (data.testCases.length === 0) {
-        toast({
-          title: "Validation Error",
-          description: "At least one test case is required",
-          variant: "destructive",
-        });
-        return;
-      }
-
-      // Validate that at least one language has starter code
-      const hasStarterCode = Object.values(data.starterCode).some(code => code && code.trim());
-      if (!hasStarterCode) {
-        toast({
-          title: "Validation Error",
-          description: "Starter code is required for at least one language",
-          variant: "destructive",
-        });
-        return;
-      }
-
       // Show loading toast
       toast({
-        title: "Creating Problem",
-        description: "Please wait while we create your problem...",
+        title: editingProblem ? "Updating Problem" : "Creating Problem",
+        description: `Please wait while we ${editingProblem ? 'save your changes' : 'create your problem'}...`,
       });
 
       // Submit the data
-      await createProblemMutation.mutateAsync(data);
+      if (editingProblem) {
+        await updateProblemMutation.mutateAsync({
+          ...data,
+          id: editingProblem.id
+        });
+      } else {
+        await createProblemMutation.mutateAsync(data);
+      }
     } catch (error) {
       console.error("Form submission error:", error);
       toast({
         title: "Error",
-        description: error instanceof Error ? error.message : "An unexpected error occurred",
+        description: error instanceof Error 
+          ? error.message 
+          : editingProblem 
+            ? "Failed to update problem" 
+            : "Failed to create problem",
         variant: "destructive",
       });
     }
@@ -341,480 +490,35 @@ export default function AdminProblems() {
     }
   };
 
-  const filteredProblems = problems?.filter(problem => {
+  const filteredProblems = problems?.filter((problem: Problem) => {
     const matchesSearch = problem.title.toLowerCase().includes(searchTerm.toLowerCase());
     const matchesDifficulty = difficultyFilter === "all" || problem.difficulty === difficultyFilter;
     return matchesSearch && matchesDifficulty;
   }) || [];
 
+  const handleCloseDialog = () => {
+    const isDirty = form.formState.isDirty;
+    if (isDirty) {
+      if (confirm("You have unsaved changes. Are you sure you want to close?")) {
+        setIsCreateDialogOpen(false);
+        setEditingProblem(null);
+        form.reset();
+      }
+    } else {
+      setIsCreateDialogOpen(false);
+      setEditingProblem(null);
+      form.reset();
+    }
+  };
+
   return (
-    <div className="p-6">
+    <div className="container mx-auto py-6">
       <div className="flex justify-between items-center mb-6">
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900 dark:text-white mb-2">
-            Problem Management
-          </h1>
-          <p className="text-gray-600 dark:text-gray-400">
-            Create and manage coding problems for your platform.
-          </p>
-        </div>
-        <Dialog open={isCreateDialogOpen} onOpenChange={setIsCreateDialogOpen}>
-          <DialogTrigger asChild>
-            <Button>
-              <Plus className="w-4 h-4 mr-2" />
-              Create Problem
-            </Button>
-          </DialogTrigger>
-          <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
-            <DialogHeader>
-              <DialogTitle>Create New Problem</DialogTitle>
-            </DialogHeader>
-            <Form {...form}>
-              <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
-                <div className="grid grid-cols-2 gap-6">
-                  <div className="space-y-6">
-                    <FormField
-                      control={form.control}
-                      name="title"
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormLabel>Title</FormLabel>
-                          <FormControl>
-                            <Input {...field} placeholder="Enter problem title" />
-                          </FormControl>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
-
-                    <FormField
-                      control={form.control}
-                      name="description"
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormLabel>Description</FormLabel>
-                          <FormControl>
-                            <Textarea 
-                              {...field} 
-                              placeholder="Enter problem description with Markdown support"
-                              className="min-h-[200px]"
-                            />
-                          </FormControl>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
-
-                    <div className="grid grid-cols-2 gap-4">
-                      <FormField
-                        control={form.control}
-                        name="difficulty"
-                        render={({ field }) => (
-                          <FormItem>
-                            <FormLabel>Difficulty</FormLabel>
-                            <Select onValueChange={field.onChange} defaultValue={field.value}>
-                              <FormControl>
-                                <SelectTrigger>
-                                  <SelectValue placeholder="Select difficulty" />
-                                </SelectTrigger>
-                              </FormControl>
-                              <SelectContent>
-                                <SelectItem value="easy">Easy</SelectItem>
-                                <SelectItem value="medium">Medium</SelectItem>
-                                <SelectItem value="hard">Hard</SelectItem>
-                              </SelectContent>
-                            </Select>
-                            <FormMessage />
-                          </FormItem>
-                        )}
-                      />
-
-                      <FormField
-                        control={form.control}
-                        name="difficulty_rating"
-                        render={({ field }) => (
-                          <FormItem>
-                            <FormLabel>Difficulty Rating (1-5)</FormLabel>
-                            <FormControl>
-                              <Input 
-                                type="number" 
-                                min={1} 
-                                max={5} 
-                                {...field}
-                                onChange={e => field.onChange(parseInt(e.target.value))}
-                              />
-                            </FormControl>
-                            <FormMessage />
-                          </FormItem>
-                        )}
-                      />
-                    </div>
-
-                    <FormField
-                      control={form.control}
-                      name="tags"
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormLabel>Tags</FormLabel>
-                          <FormControl>
-                            <Input 
-                              placeholder="Enter tags separated by commas"
-                              onChange={(e) => field.onChange(e.target.value.split(",").map(tag => tag.trim()))}
-                            />
-                          </FormControl>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
-
-                    <div className="grid grid-cols-2 gap-4">
-                      <FormField
-                        control={form.control}
-                        name="timeLimit"
-                        render={({ field }) => (
-                          <FormItem>
-                            <FormLabel>Time Limit (ms)</FormLabel>
-                            <FormControl>
-                              <Input 
-                                type="number" 
-                                min={100} 
-                                {...field}
-                                onChange={e => field.onChange(parseInt(e.target.value))}
-                              />
-                            </FormControl>
-                            <FormMessage />
-                          </FormItem>
-                        )}
-                      />
-
-                      <FormField
-                        control={form.control}
-                        name="memoryLimit"
-                        render={({ field }) => (
-                          <FormItem>
-                            <FormLabel>Memory Limit (MB)</FormLabel>
-                            <FormControl>
-                              <Input 
-                                type="number" 
-                                min={16} 
-                                {...field}
-                                onChange={e => field.onChange(parseInt(e.target.value))}
-                              />
-                            </FormControl>
-                            <FormMessage />
-                          </FormItem>
-                        )}
-                      />
-                    </div>
-                  </div>
-
-                  <div className="space-y-6">
-                    <FormField
-                      control={form.control}
-                      name="inputFormat"
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormLabel>Input Format</FormLabel>
-                          <FormControl>
-                            <Textarea 
-                              {...field} 
-                              placeholder="Describe the input format"
-                              className="min-h-[100px]"
-                            />
-                          </FormControl>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
-
-                    <FormField
-                      control={form.control}
-                      name="outputFormat"
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormLabel>Output Format</FormLabel>
-                          <FormControl>
-                            <Textarea 
-                              {...field} 
-                              placeholder="Describe the output format"
-                              className="min-h-[100px]"
-                            />
-                          </FormControl>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
-
-                    <FormField
-                      control={form.control}
-                      name="constraints"
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormLabel>Constraints</FormLabel>
-                          <FormControl>
-                            <Textarea 
-                              {...field} 
-                              placeholder="List the constraints"
-                              className="min-h-[100px]"
-                            />
-                          </FormControl>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
-
-                    <FormField
-                      control={form.control}
-                      name="notes"
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormLabel>Admin Notes</FormLabel>
-                          <FormControl>
-                            <Textarea 
-                              {...field} 
-                              placeholder="Add any notes about the problem (only visible to admins)"
-                              className="min-h-[100px]"
-                            />
-                          </FormControl>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
-                  </div>
-                </div>
-
-                <div className="space-y-4">
-                  <div className="flex justify-between items-center">
-                    <h3 className="text-lg font-medium">Examples</h3>
-                    <Button type="button" variant="outline" onClick={addExample}>
-                      Add Example
-                    </Button>
-                  </div>
-                  
-                  {form.watch("examples").map((_, index) => (
-                    <Card key={index} className="p-4">
-                      <div className="flex justify-between items-center mb-4">
-                        <h4 className="font-medium">Example {index + 1}</h4>
-                        {index > 0 && (
-                          <Button
-                            type="button"
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => removeExample(index)}
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </Button>
-                        )}
-                      </div>
-
-                      <div className="space-y-4">
-                        <FormField
-                          control={form.control}
-                          name={`examples.${index}.input`}
-                          render={({ field }) => (
-                            <FormItem>
-                              <FormLabel>Input</FormLabel>
-                              <FormControl>
-                                <Textarea {...field} placeholder="Example input" />
-                              </FormControl>
-                              <FormMessage />
-                            </FormItem>
-                          )}
-                        />
-
-                        <FormField
-                          control={form.control}
-                          name={`examples.${index}.output`}
-                          render={({ field }) => (
-                            <FormItem>
-                              <FormLabel>Output</FormLabel>
-                              <FormControl>
-                                <Textarea {...field} placeholder="Example output" />
-                              </FormControl>
-                              <FormMessage />
-                            </FormItem>
-                          )}
-                        />
-
-                        <FormField
-                          control={form.control}
-                          name={`examples.${index}.explanation`}
-                          render={({ field }) => (
-                            <FormItem>
-                              <FormLabel>Explanation</FormLabel>
-                              <FormControl>
-                                <Textarea {...field} placeholder="Explain this example" />
-                              </FormControl>
-                              <FormMessage />
-                            </FormItem>
-                          )}
-                        />
-                      </div>
-                    </Card>
-                  ))}
-                </div>
-
-                <div className="space-y-4">
-                  <div className="flex justify-between items-center">
-                    <h3 className="text-lg font-medium">Test Cases</h3>
-                    <Button type="button" variant="outline" onClick={addTestCase}>
-                      Add Test Case
-                    </Button>
-                  </div>
-                  
-                  {form.watch("testCases").map((_, index) => (
-                    <Card key={index} className="p-4">
-                      <div className="flex justify-between items-center mb-4">
-                        <h4 className="font-medium">Test Case {index + 1}</h4>
-                        {index > 0 && (
-                          <Button
-                            type="button"
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => removeTestCase(index)}
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </Button>
-                        )}
-                      </div>
-
-                      <div className="space-y-4">
-                        <FormField
-                          control={form.control}
-                          name={`testCases.${index}.input`}
-                          render={({ field }) => (
-                            <FormItem>
-                              <FormLabel>Input</FormLabel>
-                              <FormControl>
-                                <Textarea {...field} placeholder="Test case input" />
-                              </FormControl>
-                              <FormMessage />
-                            </FormItem>
-                          )}
-                        />
-
-                        <FormField
-                          control={form.control}
-                          name={`testCases.${index}.expectedOutput`}
-                          render={({ field }) => (
-                            <FormItem>
-                              <FormLabel>Expected Output</FormLabel>
-                              <FormControl>
-                                <Textarea {...field} placeholder="Expected output" />
-                              </FormControl>
-                              <FormMessage />
-                            </FormItem>
-                          )}
-                        />
-
-                        <FormField
-                          control={form.control}
-                          name={`testCases.${index}.explanation`}
-                          render={({ field }) => (
-                            <FormItem>
-                              <FormLabel>Explanation</FormLabel>
-                              <FormControl>
-                                <Textarea {...field} placeholder="Explain this test case" />
-                              </FormControl>
-                              <FormMessage />
-                            </FormItem>
-                          )}
-                        />
-
-                        <div className="grid grid-cols-3 gap-4">
-                          <FormField
-                            control={form.control}
-                            name={`testCases.${index}.isHidden`}
-                            render={({ field }) => (
-                              <FormItem className="flex items-center space-x-2">
-                                <FormControl>
-                                  <input
-                                    type="checkbox"
-                                    checked={field.value}
-                                    onChange={field.onChange}
-                                  />
-                                </FormControl>
-                                <FormLabel className="!mt-0">Hidden test case</FormLabel>
-                                <FormMessage />
-                              </FormItem>
-                            )}
-                          />
-
-                          <FormField
-                            control={form.control}
-                            name={`testCases.${index}.timeLimit`}
-                            render={({ field }) => (
-                              <FormItem>
-                                <FormLabel>Time Limit (ms)</FormLabel>
-                                <FormControl>
-                                  <Input 
-                                    type="number"
-                                    {...field}
-                                    onChange={e => field.onChange(parseInt(e.target.value))}
-                                  />
-                                </FormControl>
-                                <FormMessage />
-                              </FormItem>
-                            )}
-                          />
-
-                          <FormField
-                            control={form.control}
-                            name={`testCases.${index}.memoryLimit`}
-                            render={({ field }) => (
-                              <FormItem>
-                                <FormLabel>Memory Limit (MB)</FormLabel>
-                                <FormControl>
-                                  <Input 
-                                    type="number"
-                                    {...field}
-                                    onChange={e => field.onChange(parseInt(e.target.value))}
-                                  />
-                                </FormControl>
-                                <FormMessage />
-                              </FormItem>
-                            )}
-                          />
-                        </div>
-                      </div>
-                    </Card>
-                  ))}
-                </div>
-
-                <div className="space-y-4">
-                  <h3 className="text-lg font-medium">Starter Code</h3>
-                  {LANGUAGES.map((lang) => (
-                    <FormField
-                      key={lang}
-                      control={form.control}
-                      name={`starterCode.${lang}`}
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormLabel className="capitalize">{lang}</FormLabel>
-                          <FormControl>
-                            <Textarea 
-                              {...field} 
-                              placeholder={`${lang} starter code`}
-                              className="font-mono min-h-[150px]"
-                            />
-                          </FormControl>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
-                  ))}
-                </div>
-
-                <div className="flex justify-end space-x-2">
-                  <Button type="button" variant="outline" onClick={() => setIsCreateDialogOpen(false)}>
-                    Cancel
-                  </Button>
-                  <Button type="submit">Create Problem</Button>
-                </div>
-              </form>
-            </Form>
-          </DialogContent>
-        </Dialog>
+        <h1 className="text-2xl font-bold">Problems Management</h1>
+        <Button onClick={() => setIsCreateDialogOpen(true)} className="bg-green-600 hover:bg-green-700">
+          <Plus className="w-4 h-4 mr-2" />
+          Add Problem
+        </Button>
       </div>
 
       <Card className="mb-6">
@@ -867,8 +571,8 @@ export default function AdminProblems() {
         </div>
       ) : (
         <div className="grid gap-4">
-          {filteredProblems.map((problem) => (
-            <Card key={problem.id}>
+          {filteredProblems.map((problem: Problem) => (
+            <Card key={problem.id} className="hover:shadow-lg transition-all duration-200">
               <CardContent className="p-6">
                 <div className="flex items-center justify-between">
                   <div className="flex-1">
@@ -880,31 +584,76 @@ export default function AdminProblems() {
                     </p>
                     <div className="flex items-center space-x-3">
                       <Badge className={
-                        problem.difficulty === "easy" ? "bg-green-100 text-green-800" :
-                        problem.difficulty === "medium" ? "bg-yellow-100 text-yellow-800" :
-                        "bg-red-100 text-red-800"
+                        problem.difficulty === "easy" ? "bg-green-100 text-green-800 dark:bg-green-900/20 dark:text-green-400" :
+                        problem.difficulty === "medium" ? "bg-yellow-100 text-yellow-800 dark:bg-yellow-900/20 dark:text-yellow-400" :
+                        "bg-red-100 text-red-800 dark:bg-red-900/20 dark:text-red-400"
                       }>
                         {problem.difficulty}
                       </Badge>
-                      {problem.tags.map((tag, index) => (
-                        <Badge key={index} variant="outline">
-                          {tag}
-                        </Badge>
-                      ))}
+                      <div className="flex flex-wrap gap-1">
+                        {problem.tags.map((tag: string) => (
+                          <Badge key={tag} variant="outline" className="text-xs">
+                            {tag}
+                          </Badge>
+                        ))}
+        </div>
                     </div>
                   </div>
-                  <div className="flex space-x-2">
-                    <Button variant="outline" size="sm">
-                      <Edit className="w-4 h-4" />
-                    </Button>
+                  <div className="flex space-x-2 ml-4">
                     <Button 
                       variant="outline" 
                       size="sm"
-                      onClick={() => {
-                        if (confirm("Are you sure you want to delete this problem?")) {
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setEditingProblem(problem);
+                        form.reset({
+                          title: problem.title,
+                          description: problem.description,
+                          difficulty: problem.difficulty,
+                          tags: problem.tags || [],
+                          constraints: problem.constraints || "",
+                          inputFormat: problem.inputFormat || "",
+                          outputFormat: problem.outputFormat || "",
+                          examples: problem.examples || [{
+                            input: "",
+                            output: "",
+                            explanation: ""
+                          }],
+                          testCases: problem.testCases || [{
+                            input: "",
+                            expectedOutput: "",
+                            explanation: "",
+                            isHidden: false,
+                            timeLimit: 1000,
+                            memoryLimit: 256
+                          }],
+                          timeLimit: problem.timeLimit || 1000,
+                          memoryLimit: problem.memoryLimit || 256,
+                          starterCode: problem.starterCode || {
+                            python: "def solution():\n    pass",
+                            c: "#include <stdio.h>\n\nint main() {\n    // Your solution here\n    return 0;\n}",
+                            java: "public class Solution {\n    public void solution() {\n    }\n}",
+                            cpp: "#include <iostream>\nusing namespace std;\n\nint main() {\n    return 0;\n}"
+                          },
+                          notes: problem.notes || "",
+                          difficulty_rating: problem.difficulty_rating || 1
+                        });
+                        setIsCreateDialogOpen(true);
+                      }}
+                      className="hover:bg-gray-100 dark:hover:bg-gray-800"
+                    >
+                      <Edit className="w-4 h-4" />
+            </Button>
+                    <Button 
+                      variant="outline" 
+                      size="sm"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        if (confirm("Are you sure you want to delete this problem? This action cannot be undone.")) {
                           deleteProblemMutation.mutate(problem.id);
                         }
                       }}
+                      className="hover:bg-red-50 dark:hover:bg-red-900/20 text-red-600 hover:text-red-700 dark:text-red-400"
                     >
                       <Trash2 className="w-4 h-4" />
                     </Button>
@@ -927,6 +676,481 @@ export default function AdminProblems() {
           </CardContent>
         </Card>
       )}
+
+      <Dialog open={isCreateDialogOpen} onOpenChange={(open) => {
+        if (!open) {
+          handleCloseDialog();
+        } else {
+          setIsCreateDialogOpen(true);
+        }
+      }}>
+        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>{editingProblem ? 'Edit Problem' : 'Create New Problem'}</DialogTitle>
+          </DialogHeader>
+          <Form {...form}>
+            <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
+              <div className="grid grid-cols-2 gap-6">
+                <div className="space-y-6">
+                  <FormField
+                    control={form.control}
+                    name="title"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Title</FormLabel>
+                        <FormControl>
+                          <Input {...field} placeholder="Enter problem title" />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+
+                  <FormField
+                    control={form.control}
+                    name="description"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Description</FormLabel>
+                        <FormControl>
+                          <Textarea 
+                            {...field} 
+                            placeholder="Enter problem description with Markdown support"
+                            className="min-h-[200px]"
+                          />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+
+                  <div className="grid grid-cols-2 gap-4">
+                    <FormField
+                      control={form.control}
+                      name="difficulty"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Difficulty</FormLabel>
+                          <Select onValueChange={field.onChange} defaultValue={field.value}>
+                            <FormControl>
+                              <SelectTrigger>
+                                <SelectValue placeholder="Select difficulty" />
+                              </SelectTrigger>
+                            </FormControl>
+                            <SelectContent>
+                              <SelectItem value="easy">Easy</SelectItem>
+                              <SelectItem value="medium">Medium</SelectItem>
+                              <SelectItem value="hard">Hard</SelectItem>
+                            </SelectContent>
+                          </Select>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+
+                    <FormField
+                      control={form.control}
+                      name="difficulty_rating"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Difficulty Rating (1-5)</FormLabel>
+                          <FormControl>
+                            <Input 
+                              type="number" 
+                              min={1} 
+                              max={5} 
+                              {...field}
+                              onChange={e => field.onChange(parseInt(e.target.value))}
+                            />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                  </div>
+
+                  <FormField
+                    control={form.control}
+                    name="tags"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Tags</FormLabel>
+                        <FormControl>
+                          <Input 
+                            placeholder="Enter tags separated by commas"
+                            onChange={(e) => field.onChange(e.target.value.split(",").map(tag => tag.trim()))}
+                          />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+
+                  <div className="grid grid-cols-2 gap-4">
+                    <FormField
+                      control={form.control}
+                      name="timeLimit"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Time Limit (ms)</FormLabel>
+                          <FormControl>
+                            <Input 
+                              type="number" 
+                              min={100} 
+                              {...field}
+                              onChange={e => field.onChange(parseInt(e.target.value))}
+                            />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+
+                    <FormField
+                      control={form.control}
+                      name="memoryLimit"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Memory Limit (MB)</FormLabel>
+                          <FormControl>
+                            <Input 
+                              type="number" 
+                              min={16} 
+                              {...field}
+                              onChange={e => field.onChange(parseInt(e.target.value))}
+                            />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                  </div>
+                </div>
+
+                <div className="space-y-6">
+                  <FormField
+                    control={form.control}
+                    name="inputFormat"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Input Format</FormLabel>
+                        <FormControl>
+                          <Textarea 
+                            {...field} 
+                            placeholder="Describe the input format"
+                            className="min-h-[100px]"
+                          />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+
+                  <FormField
+                    control={form.control}
+                    name="outputFormat"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Output Format</FormLabel>
+                        <FormControl>
+                          <Textarea 
+                            {...field} 
+                            placeholder="Describe the output format"
+                            className="min-h-[100px]"
+                          />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+
+                  <FormField
+                    control={form.control}
+                    name="constraints"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Constraints</FormLabel>
+                        <FormControl>
+                          <Textarea 
+                            {...field} 
+                            placeholder="List the constraints"
+                            className="min-h-[100px]"
+                          />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+
+                  <FormField
+                    control={form.control}
+                    name="notes"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Admin Notes</FormLabel>
+                        <FormControl>
+                          <Textarea 
+                            {...field} 
+                            placeholder="Add any notes about the problem (only visible to admins)"
+                            className="min-h-[100px]"
+                          />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                </div>
+              </div>
+
+              <div className="space-y-4">
+                <div className="flex justify-between items-center">
+                  <h3 className="text-lg font-medium">Examples</h3>
+                  <Button type="button" variant="outline" onClick={addExample}>
+                    Add Example
+                  </Button>
+                </div>
+                
+                {form.watch("examples").map((_, index) => (
+                  <Card key={index} className="p-4">
+                    <div className="flex justify-between items-center mb-4">
+                      <h4 className="font-medium">Example {index + 1}</h4>
+                      {index > 0 && (
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => removeExample(index)}
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </Button>
+                      )}
+                    </div>
+
+                    <div className="space-y-4">
+                      <FormField
+                        control={form.control}
+                        name={`examples.${index}.input`}
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>Input</FormLabel>
+                            <FormControl>
+                              <Textarea {...field} placeholder="Example input" />
+                            </FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+
+                      <FormField
+                        control={form.control}
+                        name={`examples.${index}.output`}
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>Output</FormLabel>
+                            <FormControl>
+                              <Textarea {...field} placeholder="Example output" />
+                            </FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+
+                      <FormField
+                        control={form.control}
+                        name={`examples.${index}.explanation`}
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>Explanation</FormLabel>
+                            <FormControl>
+                              <Textarea {...field} placeholder="Explain this example" />
+                            </FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+                    </div>
+                  </Card>
+                ))}
+              </div>
+
+              <div className="space-y-4">
+                <div className="flex justify-between items-center">
+                  <h3 className="text-lg font-medium">Test Cases</h3>
+                  <Button type="button" variant="outline" onClick={addTestCase}>
+                    Add Test Case
+                  </Button>
+                </div>
+                
+                {form.watch("testCases").map((_, index) => (
+                  <Card key={index} className="p-4">
+                    <div className="flex justify-between items-center mb-4">
+                      <h4 className="font-medium">Test Case {index + 1}</h4>
+                      {index > 0 && (
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => removeTestCase(index)}
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </Button>
+                      )}
+                    </div>
+
+                    <div className="space-y-4">
+                      <FormField
+                        control={form.control}
+                        name={`testCases.${index}.input`}
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>Input</FormLabel>
+                            <FormControl>
+                              <Textarea {...field} placeholder="Test case input" />
+                            </FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+
+                      <FormField
+                        control={form.control}
+                        name={`testCases.${index}.expectedOutput`}
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>Expected Output</FormLabel>
+                            <FormControl>
+                              <Textarea {...field} placeholder="Expected output" />
+                            </FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+
+                      <FormField
+                        control={form.control}
+                        name={`testCases.${index}.explanation`}
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>Explanation</FormLabel>
+                            <FormControl>
+                              <Textarea {...field} placeholder="Explain this test case" />
+                            </FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+
+                      <div className="grid grid-cols-3 gap-4">
+                        <FormField
+                          control={form.control}
+                          name={`testCases.${index}.isHidden`}
+                          render={({ field }) => (
+                            <FormItem className="flex items-center space-x-2">
+                              <FormControl>
+                                <input
+                                  type="checkbox"
+                                  checked={field.value}
+                                  onChange={field.onChange}
+                                />
+                              </FormControl>
+                              <FormLabel className="!mt-0">Hidden test case</FormLabel>
+                              <FormMessage />
+                            </FormItem>
+                          )}
+                        />
+
+                        <FormField
+                          control={form.control}
+                          name={`testCases.${index}.timeLimit`}
+                          render={({ field }) => (
+                            <FormItem>
+                              <FormLabel>Time Limit (ms)</FormLabel>
+                              <FormControl>
+                                <Input 
+                                  type="number"
+                                  {...field}
+                                  onChange={e => field.onChange(parseInt(e.target.value))}
+                                />
+                              </FormControl>
+                              <FormMessage />
+                            </FormItem>
+                          )}
+                        />
+
+                        <FormField
+                          control={form.control}
+                          name={`testCases.${index}.memoryLimit`}
+                          render={({ field }) => (
+                            <FormItem>
+                              <FormLabel>Memory Limit (MB)</FormLabel>
+                              <FormControl>
+                                <Input 
+                                  type="number"
+                                  {...field}
+                                  onChange={e => field.onChange(parseInt(e.target.value))}
+                                />
+                              </FormControl>
+                              <FormMessage />
+                            </FormItem>
+                          )}
+                        />
+                      </div>
+                    </div>
+                  </Card>
+                ))}
+              </div>
+
+              <div className="space-y-4">
+                <h3 className="text-lg font-medium">Starter Code</h3>
+                {LANGUAGES.map((lang) => (
+                  <FormField
+                    key={lang}
+                    control={form.control}
+                    name={`starterCode.${lang}`}
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel className="capitalize">{lang}</FormLabel>
+                        <FormControl>
+                          <Textarea 
+                            {...field} 
+                            placeholder={`${lang} starter code`}
+                            className="font-mono min-h-[150px]"
+                          />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                ))}
+              </div>
+
+              <div className="flex justify-end space-x-2">
+                <Button 
+                  type="button" 
+                  variant="outline"
+                  onClick={handleCloseDialog}
+                >
+                  Cancel
+                </Button>
+                <Button 
+                  type="submit"
+                  className="bg-green-600 hover:bg-green-700 text-white"
+                  disabled={createProblemMutation.isPending || updateProblemMutation.isPending}
+                >
+                  {createProblemMutation.isPending || updateProblemMutation.isPending ? (
+                    <div className="flex items-center">
+                      <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin mr-2"></div>
+                      {editingProblem ? 'Saving...' : 'Creating...'}
+                    </div>
+                  ) : (
+                    editingProblem ? 'Save Changes' : 'Create Problem'
+                  )}
+                </Button>
+              </div>
+            </form>
+          </Form>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 } 
