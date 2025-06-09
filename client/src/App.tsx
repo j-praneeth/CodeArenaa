@@ -7,12 +7,12 @@ import { ThemeProvider } from "@/components/ui/theme-provider";
 import { useEffect, useState } from 'react';
 import { Layout } from "@/components/layout/Layout";
 import NotFound from "@/pages/not-found";
-import Landing from "@/pages/Landing";
-import Dashboard from "@/pages/Dashboard";
-import Problems from "@/pages/Problems";
+import Landing from "@/pages/landing";
+import Dashboard from "@/pages/dashboard";
+import Problems from "@/pages/problems";
 import ProblemDetail from "@/pages/problem-detail";
-import Contests from "@/pages/Contests";
-import Leaderboard from "@/pages/Leaderboard";
+import Contests from "@/pages/contests";
+import Leaderboard from "@/pages/leaderboard";
 import AdminDashboard from "@/pages/admin-dashboard";
 import Profile from "@/pages/profile";
 import Settings from "@/pages/settings";
@@ -31,53 +31,15 @@ import AdminLeaderboard from "@/pages/admin/leaderboard";
 import { useAuth } from "@/hooks/useAuth";
 
 function AppContent() {
-  const [isLoading, setIsLoading] = useState(true);
-  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const { user, isLoading, isAuthenticated } = useAuth();
   const [, setLocation] = useLocation();
-  const { user } = useAuth();
-
-  useEffect(() => {
-    const token = localStorage.getItem('token');
-    if (token) {
-      // Verify token validity
-      fetch(`${config.apiUrl}/api/auth/user`, {
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
-        credentials: 'include',
-      })
-        .then(res => {
-          if (res.ok) {
-            setIsAuthenticated(true);
-          } else {
-            localStorage.removeItem('token');
-            localStorage.removeItem('user');
-            setLocation('/login');
-          }
-        })
-        .catch(() => {
-          localStorage.removeItem('token');
-          localStorage.removeItem('user');
-          setLocation('/login');
-        })
-        .finally(() => setIsLoading(false));
-    } else {
-      setIsLoading(false);
-    }
-  }, [setLocation]);
 
   // Public route wrapper
   const PublicRoute = ({ children }: { children: React.ReactNode }) => {
-    const token = localStorage.getItem('token');
-    
-    useEffect(() => {
-      if (token) {
-        setLocation('/dashboard');
-      }
-    }, [token]);
-
-    return !token ? <>{children}</> : null;
+    if (isAuthenticated) {
+      return <Redirect to="/dashboard" />;
+    }
+    return <>{children}</>;
   };
 
   // Admin route wrapper
@@ -122,8 +84,6 @@ function AppContent() {
             <Route path="/dashboard">
               <Dashboard />
             </Route>
-
-            {/* Regular routes with admin alternatives */}
             <Route path="/problems">
               {user?.role === 'admin' ? <AdminProblems /> : <Problems />}
             </Route>
@@ -142,15 +102,11 @@ function AppContent() {
             <Route path="/leaderboard">
               {user?.role === 'admin' ? <AdminLeaderboard /> : <Leaderboard />}
             </Route>
-
-            {/* Admin-only routes */}
             <Route path="/admin">
               <AdminRoute>
                 <AdminDashboard />
               </AdminRoute>
             </Route>
-
-            {/* Common routes */}
             <Route path="/profile">
               <Profile />
             </Route>
@@ -163,9 +119,7 @@ function AppContent() {
           </Switch>
         </Layout>
       ) : (
-        <Route>
-          <Redirect to="/login" />
-        </Route>
+        <Redirect to="/login" />
       )}
     </Switch>
   );

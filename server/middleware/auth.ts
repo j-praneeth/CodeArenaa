@@ -81,11 +81,14 @@ export const protect = async (req: AuthRequest, res: Response, next: NextFunctio
       req.user = {
         ...user,
         id: user._id.toString(),
+        sub: user._id.toString(),
         claims: {
           sub: user._id.toString(),
           role: user.role
         }
       };
+
+      console.log('[DEBUG] Attached user to request:', req.user);
 
       next();
     } catch (jwtError) {

@@ -44,9 +44,11 @@ export function useAuth() {
         return null;
       }
     },
-    retry: 1,
+    retry: false, // Disable retries
     staleTime: 300000, // 5 minutes
     gcTime: 3600000, // 1 hour
+    refetchOnWindowFocus: false, // Disable refetch on window focus
+    refetchOnReconnect: false, // Disable refetch on reconnect
   });
 
   const logout = useCallback(async () => {

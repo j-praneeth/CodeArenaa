@@ -8,6 +8,7 @@ import authRoutes from "./routes/auth";
 import passport from "passport";
 import session from "express-session";
 import cors from "cors";
+import { Request, Response, NextFunction } from "express";
 
 // Load environment variables
 dotenv.config();
@@ -59,14 +60,6 @@ app.use('/api/auth', (req, res, next) => {
   next();
 }, authRoutes);
 
-// Log all registered routes
-app.use((req, res, next) => {
-  console.log('[DEBUG] Available routes:', app._router.stack
-    .filter((r: any) => r.route)
-    .map((r: any) => `${Object.keys(r.route.methods)} ${r.route.path}`));
-  next();
-});
-
 (async () => {
   // Connect to MongoDB first
   await connectToMongoDB();
@@ -74,11 +67,9 @@ app.use((req, res, next) => {
   const server = await registerRoutes(app);
 
   // Error handling middleware
-  app.use((err: any, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
+  app.use((err: Error, req: Request, res: Response, next: NextFunction) => {
     console.error('[DEBUG] Error:', err);
-    const status = err.status || err.statusCode || 500;
-    const message = err.message || "Internal Server Error";
-    res.status(status).json({ message });
+    res.status(500).json({ error: 'Internal Server Error' });
   });
 
   // Setup Vite AFTER auth routes

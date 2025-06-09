@@ -1,5 +1,6 @@
 import { useEffect, useRef } from "react";
-import type { Problem } from "@shared/schema";
+import type { Problem } from "@/types/problem";
+import Editor, { OnMount, OnChange } from "@monaco-editor/react";
 
 interface CodeEditorProps {
   value: string;
@@ -9,71 +10,82 @@ interface CodeEditorProps {
 }
 
 export function CodeEditor({ value, onChange, language, problem }: CodeEditorProps) {
-  const editorRef = useRef<HTMLDivElement>(null);
+  const editorRef = useRef<Parameters<OnMount>[0] | null>(null);
+  const previousLanguageRef = useRef(language);
 
-  // Mock Monaco Editor implementation
-  // In a real implementation, you would use @monaco-editor/react
+  // Effect to handle language changes
   useEffect(() => {
-    if (editorRef.current) {
-      // Initialize Monaco Editor here
-      // For now, we'll use a simple textarea
+    // Only update code if language has changed
+    if (previousLanguageRef.current !== language) {
+      const starterCode = problem?.starterCode?.[language] || getDefaultStarterCode(language);
+      onChange(starterCode);
+      previousLanguageRef.current = language;
     }
-  }, [language]);
+  }, [language, problem, onChange]);
 
-  const getStarterCode = () => {
-    if (problem?.starterCode && typeof problem.starterCode === 'object') {
-      const starterCode = problem.starterCode as Record<string, string>;
-      return starterCode[language] || getDefaultStarterCode();
+  const handleEditorDidMount: OnMount = (editor) => {
+    editorRef.current = editor;
+    // Set initial value to starter code if no value is provided
+    if (!value) {
+      const starterCode = problem?.starterCode?.[language] || getDefaultStarterCode(language);
+      onChange(starterCode);
     }
-    return getDefaultStarterCode();
   };
 
-  const getDefaultStarterCode = () => {
-    switch (language) {
+  const getDefaultStarterCode = (lang: string) => {
+    switch (lang) {
       case "python":
-        return `def solution(nums, target):
-    # Write your solution here
-    pass`;
+        return `def solution():\n    pass`;
       case "java":
-        return `public class Solution {
-    public int[] solution(int[] nums, int target) {
-        // Write your solution here
-        return new int[]{};
-    }
-}`;
+        return `public class Solution {\n    public void solution() {\n    }\n}`;
       case "cpp":
-        return `#include <vector>
-using namespace std;
-
-class Solution {
-public:
-    vector<int> solution(vector<int>& nums, int target) {
-        // Write your solution here
-        return {};
-    }
-};`;
-      case "javascript":
-        return `function solution(nums, target) {
-    // Write your solution here
-    return [];
-}`;
+        return `#include <iostream>\nusing namespace std;\n\nint main() {\n    return 0;\n}`;
+      case "c":
+        return `#include <stdio.h>\n\nint main() {\n    // Your solution here\n    return 0;\n}`;
       default:
         return "// Write your solution here";
     }
   };
 
-  const currentCode = value || getStarterCode();
+  const getMonacoLanguage = (lang: string) => {
+    switch (lang) {
+      case "python":
+        return "python";
+      case "java":
+        return "java";
+      case "cpp":
+      case "c":
+        return "cpp";
+      default:
+        return "plaintext";
+    }
+  };
 
   return (
     <div className="h-full bg-gray-900 text-gray-100">
-      <textarea
-        ref={editorRef}
-        value={currentCode}
-        onChange={(e) => onChange(e.target.value)}
-        className="w-full h-full p-4 bg-gray-900 text-gray-100 font-mono text-sm resize-none border-none outline-none"
-        placeholder="Write your solution here..."
-        spellCheck={false}
-        style={{ fontFamily: 'JetBrains Mono, monospace' }}
+      <Editor
+        height="100%"
+        defaultLanguage={getMonacoLanguage(language)}
+        language={getMonacoLanguage(language)}
+        value={value || (problem?.starterCode?.[language] || getDefaultStarterCode(language))}
+        onChange={(value) => onChange(value || "")}
+        onMount={handleEditorDidMount}
+        theme="vs-dark"
+        options={{
+          minimap: { enabled: false },
+          fontSize: 14,
+          lineNumbers: "on",
+          scrollBeyondLastLine: false,
+          automaticLayout: true,
+          tabSize: 4,
+          wordWrap: "on",
+          fontFamily: "JetBrains Mono, monospace",
+          renderWhitespace: "selection",
+          rulers: [80],
+          bracketPairColorization: {
+            enabled: true
+          }
+        }}
       />
     </div>
   );

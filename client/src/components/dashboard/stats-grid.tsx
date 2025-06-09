@@ -3,10 +3,23 @@ import { useAuth } from "@/hooks/useAuth";
 import { Card, CardContent } from "@/components/ui/card";
 import { CheckCircle, Trophy, Flame, GraduationCap } from "lucide-react";
 
+interface UserStats {
+  total: number;
+  accepted: number;
+  streak: number;
+  problemsSolved: number;
+  totalProblems: number;
+  courseProgress: {
+    currentCourse: string;
+    progress: number;
+  };
+  contestRank: number;
+}
+
 export function StatsGrid() {
   const { user } = useAuth();
   
-  const { data: userStats, isLoading } = useQuery({
+  const { data: userStats, isLoading } = useQuery<UserStats>({
     queryKey: ["/api/users/me/stats"],
     retry: false,
   });
@@ -30,20 +43,20 @@ export function StatsGrid() {
   const stats = [
     {
       title: "Problems Solved",
-      value: userStats?.accepted || 0,
+      value: userStats?.problemsSolved || 0,
       icon: CheckCircle,
       iconBg: "bg-green-100 dark:bg-green-900/20",
       iconColor: "text-green-500",
-      change: "+3 this week",
+      change: `${userStats?.problemsSolved || 0}/${userStats?.totalProblems || 0} total`,
       changeColor: "text-green-600 dark:text-green-400",
     },
     {
       title: "Contest Rank",
-      value: "152",
+      value: userStats?.contestRank ? `#${userStats.contestRank}` : "Unranked",
       icon: Trophy,
       iconBg: "bg-blue-100 dark:bg-blue-900/20",
       iconColor: "text-blue-500",
-      change: "↑ 23 positions",
+      change: userStats?.contestRank ? `Top ${Math.round((userStats.contestRank / (userStats.totalProblems || 1)) * 100)}%` : "Join contests to rank up",
       changeColor: "text-blue-600 dark:text-blue-400",
     },
     {
@@ -52,16 +65,16 @@ export function StatsGrid() {
       icon: Flame,
       iconBg: "bg-orange-100 dark:bg-orange-900/20",
       iconColor: "text-orange-500",
-      change: "days active",
+      change: "points earned",
       changeColor: "text-orange-600 dark:text-orange-400",
     },
     {
       title: "Course Progress",
-      value: "78%",
+      value: `${userStats?.courseProgress?.progress || 0}%`,
       icon: GraduationCap,
       iconBg: "bg-purple-100 dark:bg-purple-900/20",
       iconColor: "text-purple-500",
-      change: "Data Structures",
+      change: userStats?.courseProgress?.currentCourse || "No course started",
       changeColor: "text-purple-600 dark:text-purple-400",
     },
   ];
@@ -69,25 +82,21 @@ export function StatsGrid() {
   return (
     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
       {stats.map((stat, index) => (
-        <Card key={index} className="shadow-sm border border-gray-200 dark:border-gray-800">
+        <Card key={index}>
           <CardContent className="p-6">
             <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm font-medium text-gray-600 dark:text-gray-400">
-                  {stat.title}
-                </p>
-                <p className="text-2xl font-bold text-gray-900 dark:text-white mt-1">
-                  {stat.value}
-                </p>
-              </div>
-              <div className={`w-12 h-12 ${stat.iconBg} rounded-lg flex items-center justify-center`}>
-                <stat.icon className={`${stat.iconColor} h-6 w-6`} />
+              <div className={`p-2 rounded-lg ${stat.iconBg}`}>
+                <stat.icon className={`w-6 h-6 ${stat.iconColor}`} />
               </div>
             </div>
             <div className="mt-4">
-              <span className={`text-sm font-medium ${stat.changeColor}`}>
+              <p className="text-sm font-medium text-gray-600 dark:text-gray-400">
+                {stat.title}
+              </p>
+              <p className="text-3xl font-bold">{stat.value}</p>
+              <p className={`text-sm ${stat.changeColor}`}>
                 {stat.change}
-              </span>
+              </p>
             </div>
           </CardContent>
         </Card>

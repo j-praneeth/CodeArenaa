@@ -157,7 +157,6 @@ class DatabaseConnection extends EventEmitter {
       throw error;
     }
   }
-
   private async handleError(error: Error): Promise<void> {
     console.error('[DEBUG] Handling MongoDB error:', error);
     console.error('[DEBUG] Error stack:', error.stack);
@@ -214,3 +213,4 @@ export const getDb = (): Db => {
 export const closeMongoDB = async (): Promise<void> => {
   return DatabaseConnection.getInstance().close();
 };
+

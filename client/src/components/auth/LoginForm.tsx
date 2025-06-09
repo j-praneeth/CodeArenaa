@@ -6,6 +6,7 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { useLocation } from 'wouter';
 import { config, endpoints } from '@/config';
+import { useQueryClient } from '@tanstack/react-query';
 
 interface LoginFormProps {
   onSuccess?: (token: string) => void;
@@ -17,6 +18,7 @@ export function LoginForm({ onSuccess }: LoginFormProps) {
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [, setLocation] = useLocation();
+  const queryClient = useQueryClient();
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -39,10 +41,18 @@ export function LoginForm({ onSuccess }: LoginFormProps) {
         throw new Error(data.message || 'Login failed');
       }
 
+      // Store auth data
       localStorage.setItem('token', data.token);
       localStorage.setItem('user', JSON.stringify(data.user));
+      
+      // Invalidate and refetch user query
+      await queryClient.invalidateQueries({ queryKey: ['user'] });
+      
+      // Call onSuccess callback
       onSuccess?.(data.token);
-      setLocation('/dashboard');
+      
+      // Navigate and refresh
+      window.location.href = '/dashboard';
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Login failed');
     } finally {
