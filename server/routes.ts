@@ -444,6 +444,148 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  app.put('/api/assignments/:id', isAuthenticated, requireAdmin, async (req: any, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      const assignment = await storage.updateAssignment(id, req.body);
+      res.json(assignment);
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ message: "Invalid data", errors: error.errors });
+      }
+      console.error("Error updating assignment:", error);
+      res.status(500).json({ message: "Failed to update assignment" });
+    }
+  });
+
+  app.delete('/api/assignments/:id', isAuthenticated, requireAdmin, async (req: any, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      await storage.deleteAssignment(id);
+      res.status(204).send();
+    } catch (error) {
+      console.error("Error deleting assignment:", error);
+      res.status(500).json({ message: "Failed to delete assignment" });
+    }
+  });
+
+  // Assignment filtering by course tag
+  app.get('/api/assignments/course/:courseTag', isAuthenticated, async (req: any, res) => {
+    try {
+      const courseTag = req.params.courseTag;
+      const assignments = await storage.getAssignmentsByCourseTag(courseTag);
+      res.json(assignments);
+    } catch (error) {
+      console.error("Error fetching assignments by course tag:", error);
+      res.status(500).json({ message: "Failed to fetch assignments" });
+    }
+  });
+
+  // Assignment submission routes
+  app.get('/api/assignments/:id/submissions', isAuthenticated, async (req: any, res) => {
+    try {
+      const assignmentId = parseInt(req.params.id);
+      const userId = req.user.claims.sub;
+      const user = await storage.getUser(userId);
+      
+      if (user?.role === 'admin') {
+        // Admin can see all submissions for this assignment
+        const submissions = await storage.getAssignmentSubmissions(assignmentId);
+        res.json(submissions);
+      } else {
+        // Students can only see their own submission
+        const submission = await storage.getUserAssignmentSubmission(assignmentId, userId);
+        res.json(submission ? [submission] : []);
+      }
+    } catch (error) {
+      console.error("Error fetching assignment submissions:", error);
+      res.status(500).json({ message: "Failed to fetch submissions" });
+    }
+  });
+
+  app.get('/api/assignments/:id/submission', isAuthenticated, async (req: any, res) => {
+    try {
+      const assignmentId = parseInt(req.params.id);
+      const userId = req.user.claims.sub;
+      
+      const submission = await storage.getUserAssignmentSubmission(assignmentId, userId);
+      res.json(submission);
+    } catch (error) {
+      console.error("Error fetching user assignment submission:", error);
+      res.status(500).json({ message: "Failed to fetch submission" });
+    }
+  });
+
+  app.post('/api/assignments/:id/submission', isAuthenticated, async (req: any, res) => {
+    try {
+      const assignmentId = parseInt(req.params.id);
+      const userId = req.user.claims.sub;
+      
+      // Check if assignment exists
+      const assignment = await storage.getAssignment(assignmentId);
+      if (!assignment) {
+        return res.status(404).json({ message: "Assignment not found" });
+      }
+
+      // Calculate max score
+      const maxScore = assignment.questions.reduce((sum, q) => sum + q.points, 0);
+
+      // Check if user already has a submission
+      let submission = await storage.getUserAssignmentSubmission(assignmentId, userId);
+      
+      if (submission) {
+        // Update existing submission
+        submission = await storage.updateAssignmentSubmission(submission.id, {
+          questionSubmissions: req.body.questionSubmissions,
+          totalScore: req.body.totalScore || 0,
+          status: req.body.status || 'in_progress'
+        });
+      } else {
+        // Create new submission
+        submission = await storage.createAssignmentSubmission({
+          assignmentId,
+          userId,
+          questionSubmissions: req.body.questionSubmissions || [],
+          totalScore: req.body.totalScore || 0,
+          maxScore,
+          status: req.body.status || 'in_progress'
+        });
+      }
+      
+      res.json(submission);
+    } catch (error) {
+      console.error("Error creating/updating assignment submission:", error);
+      res.status(500).json({ message: "Failed to save submission" });
+    }
+  });
+
+  app.post('/api/assignments/:id/submit', isAuthenticated, async (req: any, res) => {
+    try {
+      const assignmentId = parseInt(req.params.id);
+      const userId = req.user.claims.sub;
+      
+      const submission = await storage.submitAssignment(assignmentId, userId);
+      res.json(submission);
+    } catch (error) {
+      console.error("Error submitting assignment:", error);
+      res.status(500).json({ message: "Failed to submit assignment" });
+    }
+  });
+
+  // Code execution for coding problems
+  app.post('/api/execute', isAuthenticated, async (req, res) => {
+    try {
+      const { code, language, input } = req.body;
+      
+      // Mock code execution for now
+      const result = mockExecuteCode(code, language);
+      res.json(result);
+    } catch (error) {
+      console.error("Error executing code:", error);
+      res.status(500).json({ message: "Failed to execute code" });
+    }
+  });
+
   // Group routes
   app.get('/api/groups', isAuthenticated, async (req: any, res) => {
     try {
