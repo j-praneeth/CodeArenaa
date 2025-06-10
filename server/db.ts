@@ -207,7 +207,22 @@ export const connectToMongoDB = async (): Promise<Db> => {
 };
 
 export const getDb = (): Db => {
-  return DatabaseConnection.getInstance().getDb();
+  try {
+    const connection = DatabaseConnection.getInstance();
+    const db = connection.getDb();
+    
+    // Test the connection
+    db.command({ ping: 1 }).catch(async (error) => {
+      console.error('[DEBUG] Database ping failed:', error);
+      // Try to reconnect
+      await connection.connect();
+    });
+    
+    return db;
+  } catch (error) {
+    console.error('[DEBUG] Error getting database connection:', error);
+    throw new Error('Database connection error. Please try again.');
+  }
 };
 
 export const closeMongoDB = async (): Promise<void> => {

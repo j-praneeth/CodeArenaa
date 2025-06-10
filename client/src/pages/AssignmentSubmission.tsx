@@ -77,48 +77,131 @@ export default function AssignmentSubmission() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   
-  const assignmentId = parseInt(params?.id || "0");
+  const assignmentId = params?.id ? parseInt(params.id) : null;
   const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
   const [questionSubmissions, setQuestionSubmissions] = useState<QuestionSubmission[]>([]);
   const [selectedLanguage, setSelectedLanguage] = useState("javascript");
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isInitializing, setIsInitializing] = useState(true);
 
-  const { data: assignment, isLoading: assignmentLoading } = useQuery<Assignment>({
+  // Redirect if no valid assignment ID
+  useEffect(() => {
+    if (!assignmentId) {
+      toast({
+        title: "Error",
+        description: "Invalid assignment ID",
+        variant: "destructive",
+      });
+      navigate("/assignments");
+    }
+  }, [assignmentId, navigate]);
+
+  const { data: assignment, isLoading: assignmentLoading, error: assignmentError } = useQuery<Assignment>({
     queryKey: ["/api/assignments", assignmentId],
     enabled: !!assignmentId,
+    retry: 2,
+    retryDelay: 1000,
   });
 
-  const { data: existingSubmission } = useQuery<AssignmentSubmission>({
+  const { data: existingSubmission, isLoading: submissionLoading } = useQuery<AssignmentSubmission>({
     queryKey: ["/api/assignments", assignmentId, "submission"],
     enabled: !!assignmentId,
+    retry: 2,
+    retryDelay: 1000,
   });
 
   // Initialize submissions from existing data or create empty ones
   useEffect(() => {
-    if (assignment && !existingSubmission) {
-      const initialSubmissions = assignment.questions.map(question => ({
-        questionId: question.id,
-        type: question.type,
-        selectedOptionId: "",
-        code: question.type === "coding" ? getStarterCode(question, selectedLanguage) : "",
-        language: selectedLanguage,
-      }));
-      setQuestionSubmissions(initialSubmissions);
-    } else if (existingSubmission) {
-      setQuestionSubmissions(existingSubmission.questionSubmissions);
+    console.log('[DEBUG] Initialization effect running:', {
+      assignmentLoading,
+      submissionLoading,
+      hasAssignment: !!assignment,
+      hasQuestions: !!assignment?.questions?.length,
+      hasExistingSubmission: !!existingSubmission
+    });
+
+    if (assignmentLoading || submissionLoading) {
+      console.log('[DEBUG] Still loading data...');
+      return;
     }
-  }, [assignment, existingSubmission, selectedLanguage]);
+
+    if (!assignment) {
+      console.log('[DEBUG] No assignment available');
+      setIsInitializing(false);
+      return;
+    }
+
+    if (!assignment.questions?.length) {
+      console.log('[DEBUG] Assignment has no questions');
+      setIsInitializing(false);
+      return;
+    }
+
+    const initializeSubmission = async () => {
+      console.log('[DEBUG] Starting submission initialization');
+      try {
+        if (!existingSubmission) {
+          console.log('[DEBUG] Creating new submission');
+          // Create new submission
+          const initialSubmissions = assignment.questions.map(question => ({
+            questionId: question.id,
+            type: question.type,
+            selectedOptionId: "",
+            code: question.type === "coding" ? getStarterCode(question, selectedLanguage) : "",
+            language: selectedLanguage,
+          }));
+          setQuestionSubmissions(initialSubmissions);
+          
+          // Create initial submission in backend
+          await saveSubmissionMutation.mutateAsync({
+            questionSubmissions: initialSubmissions,
+            status: 'in_progress'
+          });
+
+          toast({
+            title: "Assignment Started",
+            description: "Your progress will be saved automatically.",
+          });
+        } else {
+          console.log('[DEBUG] Using existing submission');
+          // Use existing submission
+          setQuestionSubmissions(existingSubmission.questionSubmissions);
+          // If the submission is already submitted or graded, disable editing
+          if (existingSubmission.status === 'submitted' || existingSubmission.status === 'graded') {
+            setIsSubmitting(true);
+            toast({
+              title: "Assignment Already Submitted",
+              description: "You cannot make changes to this submission.",
+              variant: "default"
+            });
+          }
+        }
+      } catch (error) {
+        console.error('Error initializing submission:', error);
+        toast({
+          title: "Error",
+          description: "Failed to initialize assignment. Please try again.",
+          variant: "destructive",
+        });
+      } finally {
+        console.log('[DEBUG] Initialization complete');
+        setIsInitializing(false);
+      }
+    };
+
+    initializeSubmission();
+  }, [assignment, existingSubmission, selectedLanguage, assignmentLoading, submissionLoading]);
 
   const saveSubmissionMutation = useMutation({
-    mutationFn: (data: { questionSubmissions: QuestionSubmission[], status?: string }) => 
-      apiRequest(`/api/assignments/${assignmentId}/submission`, "POST", data),
+    mutationFn: async (data: any) => {
+      const response = await apiRequest(`/api/assignments/${assignmentId}/submission`, "POST", data);
+      return response;
+    },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/assignments", assignmentId, "submission"] });
-      toast({
-        title: "Success",
-        description: "Progress saved successfully",
-      });
     },
     onError: (error: any) => {
+      console.error('Error saving submission:', error);
       toast({
         title: "Error",
         description: error.message || "Failed to save progress",
@@ -128,14 +211,15 @@ export default function AssignmentSubmission() {
   });
 
   const submitAssignmentMutation = useMutation({
-    mutationFn: () => {
-      // First save the current progress
-      return saveSubmissionMutation.mutateAsync({
-        questionSubmissions: evaluateSubmissions(),
+    mutationFn: async () => {
+      const response = await apiRequest(`/api/assignments/${assignmentId}/submit`, "POST", {
+        questionSubmissions,
         status: 'submitted'
       });
+      return response;
     },
     onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/assignments", assignmentId, "submission"] });
       toast({
         title: "Success",
         description: "Assignment submitted successfully",
@@ -143,6 +227,7 @@ export default function AssignmentSubmission() {
       navigate("/assignments");
     },
     onError: (error: any) => {
+      console.error('Error submitting assignment:', error);
       toast({
         title: "Error",
         description: error.message || "Failed to submit assignment",
@@ -190,45 +275,238 @@ export default function AssignmentSubmission() {
     });
   };
 
-  const handleSaveProgress = () => {
-    saveSubmissionMutation.mutate({
-      questionSubmissions: evaluateSubmissions(),
-      status: 'in_progress'
-    });
-  };
-
-  const handleSubmitAssignment = () => {
-    if (window.confirm("Are you sure you want to submit this assignment? You won't be able to make changes after submission.")) {
-      submitAssignmentMutation.mutate();
+  const handleSaveProgress = async () => {
+    if (!assignment) return;
+    
+    try {
+      setIsSubmitting(true);
+      await saveSubmissionMutation.mutateAsync({
+        questionSubmissions,
+        status: 'in_progress'
+      });
+      toast({
+        title: "Progress Saved",
+        description: "Your progress has been saved",
+      });
+    } catch (error) {
+      console.error('Error saving progress:', error);
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
-  const currentQuestion = assignment?.questions[currentQuestionIndex];
-  const currentSubmission = questionSubmissions.find(s => s.questionId === currentQuestion?.id);
-  const progress = assignment ? ((currentQuestionIndex + 1) / assignment.questions.length) * 100 : 0;
+  const handleSubmitAssignment = async () => {
+    if (!assignment) return;
+    
+    if (window.confirm("Are you sure you want to submit this assignment? You won't be able to make changes after submission.")) {
+      try {
+        setIsSubmitting(true);
+        await submitAssignmentMutation.mutateAsync();
+      } catch (error) {
+        console.error('Error submitting assignment:', error);
+      } finally {
+        setIsSubmitting(false);
+      }
+    }
+  };
 
-  if (assignmentLoading) {
+  // Show loading state
+  if (assignmentLoading || submissionLoading || isInitializing) {
     return (
       <div className="container mx-auto p-6">
-        <div className="flex items-center justify-center h-64">
+        <div className="flex flex-col items-center justify-center h-64 gap-4">
           <div className="text-lg">Loading assignment...</div>
+          <Progress value={30} className="w-64" />
+          <div className="text-sm text-muted-foreground">Please wait while we prepare your assignment</div>
         </div>
       </div>
     );
   }
 
-  if (!assignment) {
+  // Show error state
+  if (assignmentError) {
     return (
       <div className="container mx-auto p-6">
-        <Card>
-          <CardContent className="flex flex-col items-center justify-center h-64">
-            <div className="text-lg mb-2">Assignment not found</div>
-            <Button onClick={() => navigate("/assignments")}>Back to Assignments</Button>
-          </CardContent>
-        </Card>
+        <div className="flex flex-col items-center justify-center h-64 gap-4">
+          <div className="text-lg text-destructive">Error loading assignment</div>
+          <div className="text-sm text-muted-foreground">{assignmentError.message}</div>
+          <Button onClick={() => navigate("/assignments")}>
+            <ArrowLeft className="h-4 w-4 mr-2" />
+            Back to Assignments
+          </Button>
+        </div>
       </div>
     );
   }
+
+  // Show not found state
+  if (!assignment || !assignment.questions?.length) {
+    return (
+      <div className="container mx-auto p-6">
+        <div className="flex flex-col items-center justify-center h-64 gap-4">
+          <div className="text-lg">Assignment not found or has no questions</div>
+          <div className="text-sm text-muted-foreground">This assignment may have been deleted or is not yet ready.</div>
+          <Button onClick={() => navigate("/assignments")}>
+            <ArrowLeft className="h-4 w-4 mr-2" />
+            Back to Assignments
+          </Button>
+        </div>
+      </div>
+    );
+  }
+
+  // At this point TypeScript knows assignment and questions exist and are non-empty
+  const currentQuestion = assignment.questions[currentQuestionIndex];
+  if (!currentQuestion) {
+    // Handle invalid question index
+    setCurrentQuestionIndex(0);
+    return null;
+  }
+
+  const currentSubmission = questionSubmissions.find(s => s.questionId === currentQuestion.id);
+  const progress = ((currentQuestionIndex + 1) / assignment.questions.length) * 100;
+  const totalQuestions = assignment.questions.length;
+
+  const handleNextQuestion = () => {
+    if (currentQuestionIndex < assignment.questions.length - 1) {
+      setCurrentQuestionIndex(prev => prev + 1);
+    }
+  };
+
+  const handlePreviousQuestion = () => {
+    if (currentQuestionIndex > 0) {
+      setCurrentQuestionIndex(prev => prev - 1);
+    }
+  };
+
+  // Now we can safely use currentQuestion since we've checked it exists
+  const currentQuestionCard = (
+    <Card className="mb-6">
+      <CardHeader>
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <Badge variant={currentQuestion.type === "mcq" ? "default" : "secondary"}>
+              {currentQuestion.type === "mcq" ? (
+                <>
+                  <FileText className="h-3 w-3 mr-1" />
+                  Multiple Choice
+                </>
+              ) : (
+                <>
+                  <Code className="h-3 w-3 mr-1" />
+                  Coding Problem
+                </>
+              )}
+            </Badge>
+            <Badge variant="outline">{currentQuestion.points} points</Badge>
+          </div>
+        </div>
+        <CardTitle>{currentQuestion.title}</CardTitle>
+        <CardDescription>{currentQuestion.description}</CardDescription>
+      </CardHeader>
+      <CardContent>
+        {currentQuestion.type === "mcq" && currentQuestion.options && (
+          <RadioGroup
+            value={currentSubmission?.selectedOptionId}
+            onValueChange={(value) => updateQuestionSubmission(currentQuestion.id, { selectedOptionId: value })}
+          >
+            {currentQuestion.options.map((option) => (
+              <div key={option.id} className="flex items-center space-x-2 p-3 border rounded-lg hover:bg-muted/50">
+                <RadioGroupItem value={option.id} id={option.id} />
+                <Label htmlFor={option.id} className="flex-1 cursor-pointer">
+                  {option.text}
+                </Label>
+              </div>
+            ))}
+          </RadioGroup>
+        )}
+
+        {currentQuestion.type === "coding" && (
+          <div className="space-y-4">
+            {currentQuestion.problemStatement && (
+              <div>
+                <h4 className="font-medium mb-2">Problem Statement</h4>
+                <div className="p-4 bg-muted/50 rounded-lg">
+                  <pre className="whitespace-pre-wrap text-sm">{currentQuestion.problemStatement}</pre>
+                </div>
+              </div>
+            )}
+
+            {(currentQuestion.inputFormat || currentQuestion.outputFormat) && (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {currentQuestion.inputFormat && (
+                  <div>
+                    <h4 className="font-medium mb-2">Input Format</h4>
+                    <div className="p-3 bg-muted/50 rounded-lg text-sm">
+                      <pre className="whitespace-pre-wrap">{currentQuestion.inputFormat}</pre>
+                    </div>
+                  </div>
+                )}
+                {currentQuestion.outputFormat && (
+                  <div>
+                    <h4 className="font-medium mb-2">Output Format</h4>
+                    <div className="p-3 bg-muted/50 rounded-lg text-sm">
+                      <pre className="whitespace-pre-wrap">{currentQuestion.outputFormat}</pre>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
+            <div>
+              <div className="flex justify-between items-center mb-2">
+                <Label>Your Solution</Label>
+                <Select 
+                  value={selectedLanguage} 
+                  onValueChange={(value) => {
+                    setSelectedLanguage(value);
+                    updateQuestionSubmission(currentQuestion.id, { 
+                      language: value,
+                      code: getStarterCode(currentQuestion, value)
+                    });
+                  }}
+                >
+                  <SelectTrigger className="w-32">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="javascript">JavaScript</SelectItem>
+                    <SelectItem value="python">Python</SelectItem>
+                    <SelectItem value="java">Java</SelectItem>
+                    <SelectItem value="cpp">C++</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <Editor
+                height="400px"
+                language={selectedLanguage}
+                value={currentSubmission?.code || getStarterCode(currentQuestion, selectedLanguage)}
+                onChange={(value) => updateQuestionSubmission(currentQuestion.id, { code: value || "" })}
+                theme="vs-dark"
+                options={{
+                  minimap: { enabled: false },
+                  fontSize: 14,
+                  lineNumbers: "on",
+                  automaticLayout: true,
+                }}
+              />
+            </div>
+
+            {(currentQuestion.timeLimit || currentQuestion.memoryLimit) && (
+              <div className="flex gap-4 text-sm text-muted-foreground">
+                {currentQuestion.timeLimit && (
+                  <span>Time Limit: {currentQuestion.timeLimit}ms</span>
+                )}
+                {currentQuestion.memoryLimit && (
+                  <span>Memory Limit: {currentQuestion.memoryLimit}MB</span>
+                )}
+              </div>
+            )}
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  );
 
   return (
     <div className="container mx-auto p-6 max-w-4xl">
@@ -256,17 +534,17 @@ export default function AssignmentSubmission() {
           <Button 
             variant="outline" 
             onClick={handleSaveProgress}
-            disabled={saveSubmissionMutation.isPending}
+            disabled={isSubmitting || saveSubmissionMutation.isPending}
           >
             <Save className="h-4 w-4 mr-2" />
-            Save Progress
+            {saveSubmissionMutation.isPending ? "Saving..." : "Save Progress"}
           </Button>
           <Button 
             onClick={handleSubmitAssignment}
-            disabled={submitAssignmentMutation.isPending}
+            disabled={isSubmitting || submitAssignmentMutation.isPending}
           >
             <Send className="h-4 w-4 mr-2" />
-            Submit Assignment
+            {submitAssignmentMutation.isPending ? "Submitting..." : "Submit Assignment"}
           </Button>
         </div>
       </div>
@@ -275,7 +553,7 @@ export default function AssignmentSubmission() {
       <div className="mb-6">
         <div className="flex justify-between items-center mb-2">
           <span className="text-sm font-medium">
-            Question {currentQuestionIndex + 1} of {assignment.questions.length}
+            Question {currentQuestionIndex + 1} of {totalQuestions}
           </span>
           <span className="text-sm text-muted-foreground">
             {Math.round(progress)}% Complete
@@ -284,153 +562,54 @@ export default function AssignmentSubmission() {
         <Progress value={progress} className="h-2" />
       </div>
 
-      {/* Question */}
-      {currentQuestion && (
-        <Card className="mb-6">
-          <CardHeader>
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <Badge variant={currentQuestion.type === "mcq" ? "default" : "secondary"}>
-                  {currentQuestion.type === "mcq" ? (
-                    <>
-                      <FileText className="h-3 w-3 mr-1" />
-                      Multiple Choice
-                    </>
-                  ) : (
-                    <>
-                      <Code className="h-3 w-3 mr-1" />
-                      Coding Problem
-                    </>
-                  )}
-                </Badge>
-                <Badge variant="outline">{currentQuestion.points} points</Badge>
-              </div>
-            </div>
-            <CardTitle>{currentQuestion.title}</CardTitle>
-            <CardDescription>{currentQuestion.description}</CardDescription>
-          </CardHeader>
-          <CardContent>
-            {currentQuestion.type === "mcq" && currentQuestion.options && (
-              <RadioGroup
-                value={currentSubmission?.selectedOptionId}
-                onValueChange={(value) => updateQuestionSubmission(currentQuestion.id, { selectedOptionId: value })}
-              >
-                {currentQuestion.options.map((option) => (
-                  <div key={option.id} className="flex items-center space-x-2 p-3 border rounded-lg hover:bg-muted/50">
-                    <RadioGroupItem value={option.id} id={option.id} />
-                    <Label htmlFor={option.id} className="flex-1 cursor-pointer">
-                      {option.text}
-                    </Label>
-                  </div>
-                ))}
-              </RadioGroup>
-            )}
-
-            {currentQuestion.type === "coding" && (
-              <div className="space-y-4">
-                {currentQuestion.problemStatement && (
-                  <div>
-                    <h4 className="font-medium mb-2">Problem Statement</h4>
-                    <div className="p-4 bg-muted/50 rounded-lg">
-                      <pre className="whitespace-pre-wrap text-sm">{currentQuestion.problemStatement}</pre>
-                    </div>
-                  </div>
-                )}
-
-                {(currentQuestion.inputFormat || currentQuestion.outputFormat) && (
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    {currentQuestion.inputFormat && (
-                      <div>
-                        <h4 className="font-medium mb-2">Input Format</h4>
-                        <div className="p-3 bg-muted/50 rounded-lg text-sm">
-                          <pre className="whitespace-pre-wrap">{currentQuestion.inputFormat}</pre>
-                        </div>
-                      </div>
-                    )}
-                    {currentQuestion.outputFormat && (
-                      <div>
-                        <h4 className="font-medium mb-2">Output Format</h4>
-                        <div className="p-3 bg-muted/50 rounded-lg text-sm">
-                          <pre className="whitespace-pre-wrap">{currentQuestion.outputFormat}</pre>
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                )}
-
-                <div>
-                  <div className="flex justify-between items-center mb-2">
-                    <Label>Your Solution</Label>
-                    <Select 
-                      value={selectedLanguage} 
-                      onValueChange={(value) => {
-                        setSelectedLanguage(value);
-                        updateQuestionSubmission(currentQuestion.id, { 
-                          language: value,
-                          code: getStarterCode(currentQuestion, value)
-                        });
-                      }}
-                    >
-                      <SelectTrigger className="w-40">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="javascript">JavaScript</SelectItem>
-                        <SelectItem value="python">Python</SelectItem>
-                        <SelectItem value="java">Java</SelectItem>
-                        <SelectItem value="cpp">C++</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div className="border rounded-lg overflow-hidden">
-                    <Editor
-                      height="300px"
-                      language={selectedLanguage}
-                      value={currentSubmission?.code || getStarterCode(currentQuestion, selectedLanguage)}
-                      onChange={(value) => updateQuestionSubmission(currentQuestion.id, { code: value || "" })}
-                      theme="vs-dark"
-                      options={{
-                        minimap: { enabled: false },
-                        fontSize: 14,
-                        wordWrap: 'on',
-                        scrollBeyondLastLine: false,
-                      }}
-                    />
-                  </div>
-                </div>
-
-                {(currentQuestion.timeLimit || currentQuestion.memoryLimit) && (
-                  <div className="flex gap-4 text-sm text-muted-foreground">
-                    {currentQuestion.timeLimit && (
-                      <span>Time Limit: {currentQuestion.timeLimit}ms</span>
-                    )}
-                    {currentQuestion.memoryLimit && (
-                      <span>Memory Limit: {currentQuestion.memoryLimit}MB</span>
-                    )}
-                  </div>
-                )}
-              </div>
-            )}
+      {/* Question Card */}
+      {currentQuestion ? (
+        currentQuestionCard
+      ) : (
+        <Card>
+          <CardContent className="flex flex-col items-center justify-center h-64">
+            <div className="text-lg mb-2">Question not found</div>
+            <Button onClick={() => navigate("/assignments")}>Back to Assignments</Button>
           </CardContent>
         </Card>
       )}
 
       {/* Navigation */}
-      <div className="flex justify-between">
+      <div className="flex justify-between mt-6">
         <Button
           variant="outline"
-          onClick={() => setCurrentQuestionIndex(Math.max(0, currentQuestionIndex - 1))}
-          disabled={currentQuestionIndex === 0}
+          onClick={handlePreviousQuestion}
+          disabled={isSubmitting || currentQuestionIndex === 0}
         >
           <ArrowLeft className="h-4 w-4 mr-2" />
-          Previous
+          Previous Question
         </Button>
+
+        <div className="flex gap-2">
+          <Button
+            variant="outline"
+            onClick={handleSaveProgress}
+            disabled={isSubmitting || !currentQuestion || saveSubmissionMutation.isPending}
+          >
+            <Save className="h-4 w-4 mr-2" />
+            {saveSubmissionMutation.isPending ? "Saving..." : "Save Progress"}
+          </Button>
+          <Button
+            variant="default"
+            onClick={handleSubmitAssignment}
+            disabled={isSubmitting || submitAssignmentMutation.isPending}
+          >
+            <Send className="h-4 w-4 mr-2" />
+            {submitAssignmentMutation.isPending ? "Submitting..." : "Submit Assignment"}
+          </Button>
+        </div>
+
         <Button
           variant="outline"
-          onClick={() => setCurrentQuestionIndex(Math.min(assignment.questions.length - 1, currentQuestionIndex + 1))}
-          disabled={currentQuestionIndex === assignment.questions.length - 1}
+          onClick={handleNextQuestion}
+          disabled={isSubmitting || currentQuestionIndex >= totalQuestions - 1}
         >
-          Next
+          Next Question
           <ArrowRight className="h-4 w-4 ml-2" />
         </Button>
       </div>

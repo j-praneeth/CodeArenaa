@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Link } from "wouter";
+import { useLocation } from "wouter";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -26,6 +26,7 @@ interface Assignment {
 export default function Assignments() {
   const [selectedCourse, setSelectedCourse] = useState<string>("all");
   const [searchQuery, setSearchQuery] = useState("");
+  const [, navigate] = useLocation();
 
   const { data: assignments, isLoading } = useQuery<Assignment[]>({
     queryKey: ["/api/assignments"],
@@ -137,12 +138,10 @@ export default function Assignments() {
                         {assignment.description || "No description provided"}
                       </CardDescription>
                     </div>
-                    <Link href={`/assignments/${assignment.id}`}>
-                      <Button>
-                        <FileText className="h-4 w-4 mr-2" />
-                        Start Assignment
-                      </Button>
-                    </Link>
+                    <Button onClick={() => navigate(`/assignments/${assignment.id}`)}>
+                      <FileText className="h-4 w-4 mr-2" />
+                      Start Assignment
+                    </Button>
                   </div>
                 </CardHeader>
                 <CardContent>

@@ -782,27 +782,64 @@ export class MongoStorage implements IStorage {
   }
 
   async getAssignment(id: number): Promise<Assignment | undefined> {
-    const db = getDb();
-    const assignments = db.collection<Assignment>('assignments');
-    const assignment = await assignments.findOne({ id });
-    return assignment || undefined;
+    try {
+      console.log('[DEBUG] Getting assignment from storage:', id);
+      const db = getDb();
+      const assignments = db.collection<Assignment>('assignments');
+      const assignment = await assignments.findOne({ id });
+      console.log('[DEBUG] Assignment found:', !!assignment);
+      return assignment || undefined;
+    } catch (error) {
+      console.error('[DEBUG] Error getting assignment:', error);
+      throw error;
+    }
   }
 
   async createAssignment(assignment: InsertAssignment): Promise<Assignment> {
-    const db = getDb();
-    const assignments = db.collection<Assignment>('assignments');
-    const now = new Date();
-    const id = await this.getNextId('assignments');
-    
-    const newAssignment: Assignment = {
-      ...assignment,
-      id,
-      createdAt: now,
-      updatedAt: now,
-    };
-    
-    await assignments.insertOne(newAssignment);
-    return newAssignment;
+    try {
+      const db = getDb();
+      const assignments = db.collection<Assignment>('assignments');
+      const now = new Date();
+      
+      // Get the next ID with retry
+      let id: number;
+      try {
+        id = await this.getNextId('assignments');
+      } catch (error) {
+        console.error('[DEBUG] Error getting next ID, retrying:', error);
+        id = await this.getNextId('assignments');
+      }
+      
+      // Prepare the assignment document
+      const newAssignment: Assignment = {
+        ...assignment,
+        id,
+        createdAt: now,
+        updatedAt: now,
+      };
+      
+      console.log('[DEBUG] Inserting assignment:', newAssignment);
+      
+      // Try to insert with retry
+      try {
+        await assignments.insertOne(newAssignment);
+      } catch (error) {
+        console.error('[DEBUG] First insert attempt failed, retrying:', error);
+        await assignments.insertOne(newAssignment);
+      }
+      
+      // Verify the assignment was created
+      const created = await assignments.findOne({ id });
+      if (!created) {
+        throw new Error('Assignment was not created successfully');
+      }
+      
+      console.log('[DEBUG] Assignment created successfully:', created);
+      return created;
+    } catch (error) {
+      console.error('[DEBUG] Error in createAssignment:', error);
+      throw new Error('Failed to create assignment. Please try again.');
+    }
   }
 
   async updateAssignment(id: number, assignment: Partial<InsertAssignment>): Promise<Assignment> {
@@ -853,27 +890,41 @@ export class MongoStorage implements IStorage {
   }
 
   async getUserAssignmentSubmission(assignmentId: number, userId: string): Promise<AssignmentSubmission | undefined> {
-    const db = getDb();
-    const submissions = db.collection<AssignmentSubmission>('assignmentSubmissions');
-    const submission = await submissions.findOne({ assignmentId, userId });
-    return submission || undefined;
+    try {
+      console.log('[DEBUG] Getting user assignment submission:', { assignmentId, userId });
+      const db = getDb();
+      const submissions = db.collection<AssignmentSubmission>('assignmentSubmissions');
+      const submission = await submissions.findOne({ assignmentId, userId });
+      console.log('[DEBUG] Submission found:', !!submission);
+      return submission || undefined;
+    } catch (error) {
+      console.error('[DEBUG] Error getting user assignment submission:', error);
+      throw error;
+    }
   }
 
   async createAssignmentSubmission(submission: InsertAssignmentSubmission): Promise<AssignmentSubmission> {
-    const db = getDb();
-    const submissions = db.collection<AssignmentSubmission>('assignmentSubmissions');
-    const now = new Date();
-    const id = await this.getNextId('assignmentSubmissions');
-    
-    const newSubmission: AssignmentSubmission = {
-      ...submission,
-      id,
-      createdAt: now,
-      updatedAt: now,
-    };
-    
-    await submissions.insertOne(newSubmission);
-    return newSubmission;
+    try {
+      console.log('[DEBUG] Creating assignment submission:', submission);
+      const db = getDb();
+      const submissions = db.collection<AssignmentSubmission>('assignmentSubmissions');
+      const now = new Date();
+      const id = await this.getNextId('assignmentSubmissions');
+      
+      const newSubmission: AssignmentSubmission = {
+        ...submission,
+        id,
+        createdAt: now,
+        updatedAt: now,
+      };
+      
+      await submissions.insertOne(newSubmission);
+      console.log('[DEBUG] Assignment submission created:', newSubmission.id);
+      return newSubmission;
+    } catch (error) {
+      console.error('[DEBUG] Error creating assignment submission:', error);
+      throw error;
+    }
   }
 
   async updateAssignmentSubmission(id: number, submission: Partial<InsertAssignmentSubmission>): Promise<AssignmentSubmission> {

@@ -75,14 +75,43 @@ export default function CreateAssignment() {
   });
 
   const createAssignmentMutation = useMutation({
-    mutationFn: (data: CreateAssignmentForm) => {
-      const payload = {
-        ...data,
-        deadline: data.deadline ? new Date(data.deadline).toISOString() : undefined,
-      };
-      return apiRequest("/api/assignments", "POST", payload);
+    mutationFn: async (data: CreateAssignmentForm) => {
+      try {
+        console.log('[DEBUG] Submitting assignment data:', data);
+        
+        // First attempt
+        try {
+          const response = await apiRequest("/api/assignments", "POST", data);
+          const responseData = await response.json();
+          
+          if (!response.ok) {
+            throw new Error(responseData.message || 'Failed to create assignment');
+          }
+          
+          return responseData;
+        } catch (error) {
+          console.error('[DEBUG] First attempt failed, retrying:', error);
+          
+          // Wait 1 second before retry
+          await new Promise(resolve => setTimeout(resolve, 1000));
+          
+          // Second attempt
+          const response = await apiRequest("/api/assignments", "POST", data);
+          const responseData = await response.json();
+          
+          if (!response.ok) {
+            throw new Error(responseData.message || 'Failed to create assignment');
+          }
+          
+          return responseData;
+        }
+      } catch (error: any) {
+        console.error('[DEBUG] Assignment creation error:', error);
+        throw new Error(error.message || 'Failed to create assignment');
+      }
     },
-    onSuccess: () => {
+    onSuccess: (data) => {
+      console.log('[DEBUG] Assignment created successfully:', data);
       queryClient.invalidateQueries({ queryKey: ["/api/admin/assignments"] });
       toast({
         title: "Success",
@@ -91,6 +120,7 @@ export default function CreateAssignment() {
       navigate("/admin/assignments");
     },
     onError: (error: any) => {
+      console.error('[DEBUG] Assignment creation error:', error);
       toast({
         title: "Error",
         description: error.message || "Failed to create assignment",
@@ -153,23 +183,86 @@ export default function CreateAssignment() {
     form.setValue(`questions.${questionIndex}.options`, newOptions);
   };
 
-  const onSubmit = (data: CreateAssignmentForm) => {
-    // Validate MCQ questions have at least one correct answer
-    for (const question of data.questions) {
-      if (question.type === "mcq" && question.options) {
-        const hasCorrectAnswer = question.options.some(option => option.isCorrect);
-        if (!hasCorrectAnswer) {
-          toast({
-            title: "Validation Error",
-            description: `MCQ question "${question.title}" must have at least one correct answer`,
-            variant: "destructive",
-          });
-          return;
+  const onSubmit = async (data: CreateAssignmentForm) => {
+    try {
+      // Validate MCQ questions have at least one correct answer and valid options
+      for (const question of data.questions) {
+        if (question.type === "mcq") {
+          if (!question.options || question.options.length < 2) {
+            toast({
+              title: "Validation Error",
+              description: `MCQ question "${question.title}" must have at least 2 options`,
+              variant: "destructive",
+            });
+            return;
+          }
+
+          const hasCorrectAnswer = question.options.some(option => option.isCorrect);
+          if (!hasCorrectAnswer) {
+            toast({
+              title: "Validation Error",
+              description: `MCQ question "${question.title}" must have at least one correct answer`,
+              variant: "destructive",
+            });
+            return;
+          }
+
+          // Validate all options have text
+          const emptyOptions = question.options.filter(opt => !opt.text.trim());
+          if (emptyOptions.length > 0) {
+            toast({
+              title: "Validation Error",
+              description: `All options in question "${question.title}" must have text`,
+              variant: "destructive",
+            });
+            return;
+          }
         }
       }
-    }
 
-    createAssignmentMutation.mutate(data);
+      // Format the data
+      const formattedData = {
+        ...data,
+        title: data.title.trim(),
+        description: data.description?.trim(),
+        courseTag: data.courseTag.trim(),
+        deadline: data.deadline ? new Date(data.deadline).toISOString() : undefined,
+        questions: data.questions.map(q => ({
+          ...q,
+          id: q.id || nanoid(),
+          title: q.title.trim(),
+          description: q.description.trim(),
+          points: Number(q.points) || 1,
+          options: q.type === 'mcq' ? q.options?.map(opt => ({
+            id: opt.id || nanoid(),
+            text: opt.text.trim(),
+            isCorrect: !!opt.isCorrect
+          })) : undefined,
+          timeLimit: q.timeLimit ? Number(q.timeLimit) : undefined,
+          memoryLimit: q.memoryLimit ? Number(q.memoryLimit) : undefined
+        })),
+        maxAttempts: Number(data.maxAttempts) || 3,
+        isVisible: !!data.isVisible,
+        autoGrade: !!data.autoGrade
+      };
+
+      console.log('[DEBUG] Submitting assignment data:', formattedData);
+      
+      // Show loading toast
+      toast({
+        title: "Creating Assignment",
+        description: "Please wait while we create your assignment...",
+      });
+      
+      await createAssignmentMutation.mutateAsync(formattedData);
+    } catch (error: any) {
+      console.error('[DEBUG] Form submission error:', error);
+      toast({
+        title: "Error",
+        description: error.message || "Failed to create assignment",
+        variant: "destructive",
+      });
+    }
   };
 
   return (
