@@ -23,10 +23,12 @@ import { useLocation } from 'wouter';
 import { config } from '@/config';
 import Courses from "@/pages/Courses";
 import Assignments from "@/pages/Assignments";
+import AssignmentSubmission from "@/pages/AssignmentSubmission";
+import AdminAssignments from "@/pages/AdminAssignments";
+import CreateAssignment from "@/pages/CreateAssignment";
 import AdminProblems from "@/pages/admin/problems";
 import AdminContests from "@/pages/admin/contests";
 import AdminCourses from "@/pages/admin/courses";
-import AdminAssignments from "@/pages/admin/assignments";
 import AdminLeaderboard from "@/pages/admin/leaderboard";
 import { useAuth } from "@/hooks/useAuth";
 
@@ -98,6 +100,24 @@ function AppContent() {
             </Route>
             <Route path="/assignments">
               {user?.role === 'admin' ? <AdminAssignments /> : <Assignments />}
+            </Route>
+            <Route path="/assignments/:id">
+              <AssignmentSubmission />
+            </Route>
+            <Route path="/admin/assignments">
+              <AdminRoute>
+                <AdminAssignments />
+              </AdminRoute>
+            </Route>
+            <Route path="/admin/assignments/create">
+              <AdminRoute>
+                <CreateAssignment />
+              </AdminRoute>
+            </Route>
+            <Route path="/admin/assignments/:id/edit">
+              <AdminRoute>
+                <CreateAssignment />
+              </AdminRoute>
             </Route>
             <Route path="/leaderboard">
               {user?.role === 'admin' ? <AdminLeaderboard /> : <Leaderboard />}

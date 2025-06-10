@@ -95,17 +95,93 @@ export const insertUserProgressSchema = z.object({
   solvedAt: z.date().optional(),
 });
 
+// Assignment Question schemas
+export const mcqOptionSchema = z.object({
+  id: z.string(),
+  text: z.string().min(1, "Option text is required"),
+  isCorrect: z.boolean(),
+});
+
+export const assignmentQuestionSchema = z.object({
+  id: z.string(),
+  type: z.enum(["mcq", "coding"]),
+  title: z.string().min(1, "Question title is required"),
+  description: z.string().min(1, "Question description is required"),
+  points: z.number().min(1, "Points must be at least 1"),
+  
+  // MCQ specific fields
+  options: z.array(mcqOptionSchema).optional(),
+  
+  // Coding specific fields
+  problemStatement: z.string().optional(),
+  inputFormat: z.string().optional(),
+  outputFormat: z.string().optional(),
+  examples: z.array(exampleSchema).optional(),
+  testCases: z.array(testCaseSchema).optional(),
+  hiddenTestCases: z.array(testCaseSchema).optional(),
+  starterCode: starterCodeSchema.optional(),
+  timeLimit: z.number().optional(),
+  memoryLimit: z.number().optional(),
+}).refine((data) => {
+  if (data.type === 'mcq') {
+    return Array.isArray(data.options) && data.options.length >= 2;
+  }
+  return true;
+}, {
+  message: "MCQ questions must have at least 2 options"
+}).refine((data) => {
+  if (data.type === 'mcq' && data.options) {
+    return data.options.some(opt => opt.isCorrect);
+  }
+  return true;
+}, {
+  message: "MCQ questions must have at least one correct answer"
+});
+
 export const insertAssignmentSchema = z.object({
-  title: z.string(),
+  title: z.string().min(1, "Title is required"),
   description: z.string().optional(),
-  problems: z.array(z.number()).optional(),
-  assignedTo: z.array(z.string()).optional(),
-  assignmentType: z.string(),
-  dueDate: z.date().optional(),
-  maxAttempts: z.number().default(3),
+  courseTag: z.string().min(1, "Course tag is required"),
+  deadline: z.union([z.string(), z.date()]).optional().transform(val => 
+    val ? new Date(val) : undefined
+  ),
+  questions: z.array(assignmentQuestionSchema).min(1, "At least one question is required"),
+  maxAttempts: z.number().min(1, "Max attempts must be at least 1").default(3),
   isVisible: z.boolean().default(true),
   autoGrade: z.boolean().default(true),
   createdBy: z.string().optional(),
+});
+
+// Assignment Submission schemas
+export const questionSubmissionSchema = z.object({
+  questionId: z.string(),
+  type: z.enum(["mcq", "coding"]),
+  
+  // MCQ submission
+  selectedOptionId: z.string().optional(),
+  
+  // Coding submission
+  code: z.string().optional(),
+  language: z.string().optional(),
+  
+  // Results
+  isCorrect: z.boolean().optional(),
+  score: z.number().optional(),
+  feedback: z.string().optional(),
+  runtime: z.number().optional(),
+  memory: z.number().optional(),
+});
+
+export const insertAssignmentSubmissionSchema = z.object({
+  assignmentId: z.number(),
+  userId: z.string(),
+  questionSubmissions: z.array(questionSubmissionSchema),
+  totalScore: z.number().default(0),
+  maxScore: z.number(),
+  status: z.enum(["in_progress", "submitted", "graded"]).default("in_progress"),
+  submittedAt: z.date().optional(),
+  gradedAt: z.date().optional(),
+  feedback: z.string().optional(),
 });
 
 export const insertGroupSchema = z.object({
@@ -144,6 +220,10 @@ export type InsertContest = z.infer<typeof insertContestSchema>;
 export type InsertCourse = z.infer<typeof insertCourseSchema>;
 export type InsertUserProgress = z.infer<typeof insertUserProgressSchema>;
 export type InsertAssignment = z.infer<typeof insertAssignmentSchema>;
+export type InsertAssignmentSubmission = z.infer<typeof insertAssignmentSubmissionSchema>;
+export type AssignmentQuestion = z.infer<typeof assignmentQuestionSchema>;
+export type QuestionSubmission = z.infer<typeof questionSubmissionSchema>;
+export type MCQOption = z.infer<typeof mcqOptionSchema>;
 export type InsertGroup = z.infer<typeof insertGroupSchema>;
 export type InsertContestParticipant = z.infer<typeof insertContestParticipantSchema>;
 export type InsertAnnouncement = z.infer<typeof insertAnnouncementSchema>;

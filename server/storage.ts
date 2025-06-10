@@ -95,19 +95,81 @@ export interface UserProgress {
   solvedAt?: Date;
 }
 
+export interface MCQOption {
+  id: string;
+  text: string;
+  isCorrect: boolean;
+}
+
+export interface AssignmentQuestion {
+  id: string;
+  type: 'mcq' | 'coding';
+  title: string;
+  description: string;
+  points: number;
+  
+  // MCQ specific fields
+  options?: MCQOption[];
+  
+  // Coding specific fields
+  problemStatement?: string;
+  inputFormat?: string;
+  outputFormat?: string;
+  examples?: any[];
+  testCases?: any[];
+  hiddenTestCases?: any[];
+  starterCode?: any;
+  timeLimit?: number;
+  memoryLimit?: number;
+}
+
 export interface Assignment {
   _id?: ObjectId;
   id: number;
   title: string;
   description?: string;
-  problems?: number[];
-  assignedTo?: string[];
-  assignmentType: string;
-  dueDate?: Date;
+  courseTag: string;
+  deadline?: Date;
+  questions: AssignmentQuestion[];
   maxAttempts: number;
   isVisible: boolean;
   autoGrade: boolean;
   createdBy?: string;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export interface QuestionSubmission {
+  questionId: string;
+  type: 'mcq' | 'coding';
+  
+  // MCQ submission
+  selectedOptionId?: string;
+  
+  // Coding submission
+  code?: string;
+  language?: string;
+  
+  // Results
+  isCorrect?: boolean;
+  score?: number;
+  feedback?: string;
+  runtime?: number;
+  memory?: number;
+}
+
+export interface AssignmentSubmission {
+  _id?: ObjectId;
+  id: number;
+  assignmentId: number;
+  userId: string;
+  questionSubmissions: QuestionSubmission[];
+  totalScore: number;
+  maxScore: number;
+  status: 'in_progress' | 'submitted' | 'graded';
+  submittedAt?: Date;
+  gradedAt?: Date;
+  feedback?: string;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -159,6 +221,7 @@ export type InsertContest = Omit<Contest, '_id' | 'id' | 'createdAt' | 'updatedA
 export type InsertCourse = Omit<Course, '_id' | 'id' | 'createdAt' | 'updatedAt'>;
 export type InsertUserProgress = Omit<UserProgress, '_id' | 'id'>;
 export type InsertAssignment = Omit<Assignment, '_id' | 'id' | 'createdAt' | 'updatedAt'>;
+export type InsertAssignmentSubmission = Omit<AssignmentSubmission, '_id' | 'id' | 'createdAt' | 'updatedAt'>;
 export type InsertGroup = Omit<Group, '_id' | 'id' | 'createdAt' | 'updatedAt'>;
 export type InsertContestParticipant = Omit<ContestParticipant, '_id' | 'id' | 'registeredAt'>;
 export type InsertAnnouncement = Omit<Announcement, '_id' | 'id' | 'createdAt' | 'updatedAt'>;
@@ -209,6 +272,16 @@ export interface IStorage {
   updateAssignment(id: number, assignment: Partial<InsertAssignment>): Promise<Assignment>;
   deleteAssignment(id: number): Promise<void>;
   getUserAssignments(userId: string): Promise<Assignment[]>;
+  getAssignmentsByCourseTag(courseTag: string): Promise<Assignment[]>;
+  
+  // Assignment Submissions
+  getAssignmentSubmissions(assignmentId?: number, userId?: string): Promise<AssignmentSubmission[]>;
+  getAssignmentSubmission(id: number): Promise<AssignmentSubmission | undefined>;
+  getUserAssignmentSubmission(assignmentId: number, userId: string): Promise<AssignmentSubmission | undefined>;
+  createAssignmentSubmission(submission: InsertAssignmentSubmission): Promise<AssignmentSubmission>;
+  updateAssignmentSubmission(id: number, submission: Partial<InsertAssignmentSubmission>): Promise<AssignmentSubmission>;
+  deleteAssignmentSubmission(id: number): Promise<void>;
+  submitAssignment(assignmentId: number, userId: string): Promise<AssignmentSubmission>;
   getGroups(): Promise<Group[]>;
   getGroup(id: number): Promise<Group | undefined>;
   createGroup(group: InsertGroup): Promise<Group>;
@@ -709,27 +782,64 @@ export class MongoStorage implements IStorage {
   }
 
   async getAssignment(id: number): Promise<Assignment | undefined> {
-    const db = getDb();
-    const assignments = db.collection<Assignment>('assignments');
-    const assignment = await assignments.findOne({ id });
-    return assignment || undefined;
+    try {
+      console.log('[DEBUG] Getting assignment from storage:', id);
+      const db = getDb();
+      const assignments = db.collection<Assignment>('assignments');
+      const assignment = await assignments.findOne({ id });
+      console.log('[DEBUG] Assignment found:', !!assignment);
+      return assignment || undefined;
+    } catch (error) {
+      console.error('[DEBUG] Error getting assignment:', error);
+      throw error;
+    }
   }
 
   async createAssignment(assignment: InsertAssignment): Promise<Assignment> {
-    const db = getDb();
-    const assignments = db.collection<Assignment>('assignments');
-    const now = new Date();
-    const id = await this.getNextId('assignments');
-    
-    const newAssignment: Assignment = {
-      ...assignment,
-      id,
-      createdAt: now,
-      updatedAt: now,
-    };
-    
-    await assignments.insertOne(newAssignment);
-    return newAssignment;
+    try {
+      const db = getDb();
+      const assignments = db.collection<Assignment>('assignments');
+      const now = new Date();
+      
+      // Get the next ID with retry
+      let id: number;
+      try {
+        id = await this.getNextId('assignments');
+      } catch (error) {
+        console.error('[DEBUG] Error getting next ID, retrying:', error);
+        id = await this.getNextId('assignments');
+      }
+      
+      // Prepare the assignment document
+      const newAssignment: Assignment = {
+        ...assignment,
+        id,
+        createdAt: now,
+        updatedAt: now,
+      };
+      
+      console.log('[DEBUG] Inserting assignment:', newAssignment);
+      
+      // Try to insert with retry
+      try {
+        await assignments.insertOne(newAssignment);
+      } catch (error) {
+        console.error('[DEBUG] First insert attempt failed, retrying:', error);
+        await assignments.insertOne(newAssignment);
+      }
+      
+      // Verify the assignment was created
+      const created = await assignments.findOne({ id });
+      if (!created) {
+        throw new Error('Assignment was not created successfully');
+      }
+      
+      console.log('[DEBUG] Assignment created successfully:', created);
+      return created;
+    } catch (error) {
+      console.error('[DEBUG] Error in createAssignment:', error);
+      throw new Error('Failed to create assignment. Please try again.');
+    }
   }
 
   async updateAssignment(id: number, assignment: Partial<InsertAssignment>): Promise<Assignment> {
@@ -753,7 +863,98 @@ export class MongoStorage implements IStorage {
   async getUserAssignments(userId: string): Promise<Assignment[]> {
     const db = getDb();
     const assignments = db.collection<Assignment>('assignments');
-    return await assignments.find({ assignedTo: { $in: [userId] } }).sort({ createdAt: -1 }).toArray();
+    return await assignments.find({ isVisible: true }).sort({ createdAt: -1 }).toArray();
+  }
+
+  async getAssignmentsByCourseTag(courseTag: string): Promise<Assignment[]> {
+    const db = getDb();
+    const assignments = db.collection<Assignment>('assignments');
+    return await assignments.find({ courseTag, isVisible: true }).sort({ createdAt: -1 }).toArray();
+  }
+
+  // Assignment Submissions
+  async getAssignmentSubmissions(assignmentId?: number, userId?: string): Promise<AssignmentSubmission[]> {
+    const db = getDb();
+    const submissions = db.collection<AssignmentSubmission>('assignmentSubmissions');
+    const filter: any = {};
+    if (assignmentId) filter.assignmentId = assignmentId;
+    if (userId) filter.userId = userId;
+    return await submissions.find(filter).sort({ createdAt: -1 }).toArray();
+  }
+
+  async getAssignmentSubmission(id: number): Promise<AssignmentSubmission | undefined> {
+    const db = getDb();
+    const submissions = db.collection<AssignmentSubmission>('assignmentSubmissions');
+    const submission = await submissions.findOne({ id });
+    return submission || undefined;
+  }
+
+  async getUserAssignmentSubmission(assignmentId: number, userId: string): Promise<AssignmentSubmission | undefined> {
+    try {
+      console.log('[DEBUG] Getting user assignment submission:', { assignmentId, userId });
+      const db = getDb();
+      const submissions = db.collection<AssignmentSubmission>('assignmentSubmissions');
+      const submission = await submissions.findOne({ assignmentId, userId });
+      console.log('[DEBUG] Submission found:', !!submission);
+      return submission || undefined;
+    } catch (error) {
+      console.error('[DEBUG] Error getting user assignment submission:', error);
+      throw error;
+    }
+  }
+
+  async createAssignmentSubmission(submission: InsertAssignmentSubmission): Promise<AssignmentSubmission> {
+    try {
+      console.log('[DEBUG] Creating assignment submission:', submission);
+      const db = getDb();
+      const submissions = db.collection<AssignmentSubmission>('assignmentSubmissions');
+      const now = new Date();
+      const id = await this.getNextId('assignmentSubmissions');
+      
+      const newSubmission: AssignmentSubmission = {
+        ...submission,
+        id,
+        createdAt: now,
+        updatedAt: now,
+      };
+      
+      await submissions.insertOne(newSubmission);
+      console.log('[DEBUG] Assignment submission created:', newSubmission.id);
+      return newSubmission;
+    } catch (error) {
+      console.error('[DEBUG] Error creating assignment submission:', error);
+      throw error;
+    }
+  }
+
+  async updateAssignmentSubmission(id: number, submission: Partial<InsertAssignmentSubmission>): Promise<AssignmentSubmission> {
+    const db = getDb();
+    const submissions = db.collection<AssignmentSubmission>('assignmentSubmissions');
+    
+    const updatedSubmission = await submissions.findOneAndUpdate(
+      { id },
+      { $set: { ...submission, updatedAt: new Date() } },
+      { returnDocument: 'after' }
+    );
+    return updatedSubmission!;
+  }
+
+  async deleteAssignmentSubmission(id: number): Promise<void> {
+    const db = getDb();
+    const submissions = db.collection<AssignmentSubmission>('assignmentSubmissions');
+    await submissions.deleteOne({ id });
+  }
+
+  async submitAssignment(assignmentId: number, userId: string): Promise<AssignmentSubmission> {
+    const submission = await this.getUserAssignmentSubmission(assignmentId, userId);
+    if (!submission) {
+      throw new Error('Assignment submission not found');
+    }
+    
+    return await this.updateAssignmentSubmission(submission.id, {
+      status: 'submitted',
+      submittedAt: new Date()
+    });
   }
 
   async getGroups(): Promise<Group[]> {

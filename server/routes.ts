@@ -396,8 +396,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Assignment routes
   app.get('/api/assignments', isAuthenticated, async (req: any, res) => {
     try {
-      const userId = req.user.claims.sub;
-      const assignments = await storage.getUserAssignments(userId);
+      const assignments = await storage.getAssignments();
       res.json(assignments);
     } catch (error) {
       console.error("Error fetching assignments:", error);
@@ -405,13 +404,23 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.get('/api/assignments/:id', isAuthenticated, async (req, res) => {
+  app.get('/api/assignments/:id', isAuthenticated, async (req: any, res) => {
     try {
+      console.log('[DEBUG] Fetching assignment:', req.params.id);
       const id = parseInt(req.params.id);
       const assignment = await storage.getAssignment(id);
+      
       if (!assignment) {
+        console.log('[DEBUG] Assignment not found:', id);
         return res.status(404).json({ message: "Assignment not found" });
       }
+
+      if (!assignment.isVisible) {
+        console.log('[DEBUG] Assignment not visible:', id);
+        return res.status(403).json({ message: "Assignment is not available" });
+      }
+
+      console.log('[DEBUG] Assignment found:', assignment);
       res.json(assignment);
     } catch (error) {
       console.error("Error fetching assignment:", error);
@@ -419,28 +428,252 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post('/api/assignments', isAuthenticated, async (req: any, res) => {
+  app.post('/api/assignments', isAuthenticated, requireAdmin, async (req: any, res) => {
     try {
-      const userId = req.user.claims.sub;
-      const user = await storage.getUser(userId);
-      
-      if (user?.role !== 'admin') {
-        return res.status(403).json({ message: "Only admins can create assignments" });
+      const userId = req.user.sub || req.user.claims?.sub || req.user.id;
+      if (!userId) {
+        console.error('[DEBUG] No user ID found in request:', req.user);
+        return res.status(401).json({ message: "User ID not found" });
       }
 
-      const validatedData = insertAssignmentSchema.parse({
+      console.log('[DEBUG] Creating assignment with data:', req.body);
+
+      // Validate MCQ questions have at least one correct answer
+      for (const question of req.body.questions || []) {
+        if (question.type === 'mcq') {
+          if (!question.options || question.options.length < 2) {
+            return res.status(400).json({ 
+              message: "Invalid data", 
+              errors: [`Question "${question.title}" must have at least 2 options`] 
+            });
+          }
+
+          const hasCorrectAnswer = question.options.some((opt: any) => opt.isCorrect);
+          if (!hasCorrectAnswer) {
+            return res.status(400).json({ 
+              message: "Invalid data", 
+              errors: [`Question "${question.title}" must have at least one correct answer`] 
+            });
+          }
+        }
+      }
+
+      // Prepare the data for validation
+      const data = {
         ...req.body,
-        createdBy: userId,
-      });
+        deadline: req.body.deadline ? new Date(req.body.deadline) : undefined,
+        questions: req.body.questions.map((q: any) => ({
+          ...q,
+          points: Number(q.points),
+          timeLimit: q.timeLimit ? Number(q.timeLimit) : undefined,
+          memoryLimit: q.memoryLimit ? Number(q.memoryLimit) : undefined,
+          options: q.type === 'mcq' ? q.options?.map((opt: any) => ({
+            ...opt,
+            isCorrect: !!opt.isCorrect
+          })) : undefined
+        })),
+        maxAttempts: Number(req.body.maxAttempts) || 3,
+        isVisible: !!req.body.isVisible,
+        autoGrade: !!req.body.autoGrade,
+        createdBy: userId
+      };
+
+      console.log('[DEBUG] Validating assignment data:', data);
+      const validatedData = insertAssignmentSchema.parse(data);
       
+      console.log('[DEBUG] Creating assignment in storage');
       const assignment = await storage.createAssignment(validatedData);
+      
+      console.log('[DEBUG] Assignment created successfully:', assignment);
       res.status(201).json(assignment);
+    } catch (error) {
+      console.error('[DEBUG] Error creating assignment:', error);
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ 
+          message: "Invalid data", 
+          errors: error.errors.map(e => e.message)
+        });
+      }
+      res.status(500).json({ message: "Failed to create assignment" });
+    }
+  });
+
+  app.put('/api/assignments/:id', isAuthenticated, requireAdmin, async (req: any, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      const assignment = await storage.updateAssignment(id, req.body);
+      res.json(assignment);
     } catch (error) {
       if (error instanceof z.ZodError) {
         return res.status(400).json({ message: "Invalid data", errors: error.errors });
       }
-      console.error("Error creating assignment:", error);
-      res.status(500).json({ message: "Failed to create assignment" });
+      console.error("Error updating assignment:", error);
+      res.status(500).json({ message: "Failed to update assignment" });
+    }
+  });
+
+  app.delete('/api/assignments/:id', isAuthenticated, requireAdmin, async (req: any, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      await storage.deleteAssignment(id);
+      res.status(204).send();
+    } catch (error) {
+      console.error("Error deleting assignment:", error);
+      res.status(500).json({ message: "Failed to delete assignment" });
+    }
+  });
+
+  // Assignment filtering by course tag
+  app.get('/api/assignments/course/:courseTag', isAuthenticated, async (req: any, res) => {
+    try {
+      const courseTag = req.params.courseTag;
+      const assignments = await storage.getAssignmentsByCourseTag(courseTag);
+      res.json(assignments);
+    } catch (error) {
+      console.error("Error fetching assignments by course tag:", error);
+      res.status(500).json({ message: "Failed to fetch assignments" });
+    }
+  });
+
+  // Assignment submission routes
+  app.get('/api/assignments/:id/submissions', isAuthenticated, async (req: any, res) => {
+    try {
+      const assignmentId = parseInt(req.params.id);
+      const userId = req.user.claims.sub;
+      const user = await storage.getUser(userId);
+      
+      if (user?.role === 'admin') {
+        // Admin can see all submissions for this assignment
+        const submissions = await storage.getAssignmentSubmissions(assignmentId);
+        res.json(submissions);
+      } else {
+        // Students can only see their own submission
+        const submission = await storage.getUserAssignmentSubmission(assignmentId, userId);
+        res.json(submission ? [submission] : []);
+      }
+    } catch (error) {
+      console.error("Error fetching assignment submissions:", error);
+      res.status(500).json({ message: "Failed to fetch submissions" });
+    }
+  });
+
+  app.get('/api/assignments/:id/submission', isAuthenticated, async (req: any, res) => {
+    try {
+      const assignmentId = parseInt(req.params.id);
+      const userId = req.user.sub || req.user.claims?.sub || req.user.id;
+      
+      console.log('[DEBUG] Fetching submission:', { assignmentId, userId });
+      
+      if (!userId) {
+        console.error('[DEBUG] No user ID found in request:', req.user);
+        return res.status(401).json({ message: "User ID not found" });
+      }
+      
+      const submission = await storage.getUserAssignmentSubmission(assignmentId, userId);
+      console.log('[DEBUG] Submission found:', !!submission);
+      
+      res.json(submission);
+    } catch (error) {
+      console.error("Error fetching user assignment submission:", error);
+      res.status(500).json({ message: "Failed to fetch submission" });
+    }
+  });
+
+  app.post('/api/assignments/:id/submission', isAuthenticated, async (req: any, res) => {
+    try {
+      const assignmentId = parseInt(req.params.id);
+      const userId = req.user.sub || req.user.claims?.sub || req.user.id;
+      
+      if (!userId) {
+        console.error('[DEBUG] No user ID found in request:', req.user);
+        return res.status(401).json({ message: "User ID not found" });
+      }
+
+      // Check if assignment exists
+      const assignment = await storage.getAssignment(assignmentId);
+      if (!assignment) {
+        return res.status(404).json({ message: "Assignment not found" });
+      }
+
+      // Calculate max score
+      const maxScore = assignment.questions.reduce((sum, q) => sum + q.points, 0);
+
+      // Check if user already has a submission
+      let submission = await storage.getUserAssignmentSubmission(assignmentId, userId);
+      
+      if (submission) {
+        // Update existing submission
+        submission = await storage.updateAssignmentSubmission(submission.id, {
+          questionSubmissions: req.body.questionSubmissions,
+          totalScore: req.body.totalScore || 0,
+          status: req.body.status || 'in_progress'
+        });
+      } else {
+        // Create new submission
+        submission = await storage.createAssignmentSubmission({
+          assignmentId,
+          userId,
+          questionSubmissions: req.body.questionSubmissions || [],
+          totalScore: req.body.totalScore || 0,
+          maxScore,
+          status: req.body.status || 'in_progress'
+        });
+      }
+      
+      res.json(submission);
+    } catch (error) {
+      console.error("Error creating/updating assignment submission:", error);
+      res.status(500).json({ message: "Failed to save submission" });
+    }
+  });
+
+  app.post('/api/assignments/:id/submit', isAuthenticated, async (req: any, res) => {
+    try {
+      const assignmentId = parseInt(req.params.id);
+      const userId = req.user.sub || req.user.claims?.sub || req.user.id;
+      
+      if (!userId) {
+        console.error('[DEBUG] No user ID found in request:', req.user);
+        return res.status(401).json({ message: "User ID not found" });
+      }
+
+      // Check if assignment exists
+      const assignment = await storage.getAssignment(assignmentId);
+      if (!assignment) {
+        return res.status(404).json({ message: "Assignment not found" });
+      }
+
+      // Check if user has a submission
+      const submission = await storage.getUserAssignmentSubmission(assignmentId, userId);
+      if (!submission) {
+        return res.status(400).json({ message: "No submission found to submit" });
+      }
+
+      // Check if submission is already submitted
+      if (submission.status === 'submitted' || submission.status === 'graded') {
+        return res.status(400).json({ message: "Assignment already submitted" });
+      }
+
+      // Submit the assignment
+      const submittedAssignment = await storage.submitAssignment(assignmentId, userId);
+      res.json(submittedAssignment);
+    } catch (error) {
+      console.error("Error submitting assignment:", error);
+      res.status(500).json({ message: "Failed to submit assignment" });
+    }
+  });
+
+  // Code execution for coding problems
+  app.post('/api/execute', isAuthenticated, async (req, res) => {
+    try {
+      const { code, language, input } = req.body;
+      
+      // Mock code execution for now
+      const result = mockExecuteCode(code, language);
+      res.json(result);
+    } catch (error) {
+      console.error("Error executing code:", error);
+      res.status(500).json({ message: "Failed to execute code" });
     }
   });
 

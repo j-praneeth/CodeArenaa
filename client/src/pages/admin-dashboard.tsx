@@ -542,12 +542,12 @@ export default function AdminDashboard() {
                             value={user.role || 'student'}
                             onValueChange={(role) => handleUpdateUserRole(user.id, role)}
                           >
-                            <SelectTrigger key={`trigger-${user.id}`} className="w-32">
+                            <SelectTrigger className="w-32">
                               <SelectValue />
                             </SelectTrigger>
-                            <SelectContent key={`content-${user.id}`}>
-                              <SelectItem key={`student-${user.id}`} value="student">Student</SelectItem>
-                              <SelectItem key={`admin-${user.id}`} value="admin">Admin</SelectItem>
+                            <SelectContent>
+                              <SelectItem value="student">Student</SelectItem>
+                              <SelectItem value="admin">Admin</SelectItem>
                             </SelectContent>
                           </Select>
                         </TableCell>

@@ -1,11 +1,12 @@
+import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { Link, useLocation } from "wouter";
 import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Plus, Eye, Edit, Trash2, Users, Clock, BookOpen } from "lucide-react";
+import { Plus, Edit, Trash2, Eye, Users } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
-import { useLocation } from "wouter";
 
 interface Assignment {
   id: number;
@@ -35,7 +36,6 @@ export default function AdminAssignments() {
     mutationFn: (id: number) => apiRequest(`/api/assignments/${id}`, "DELETE"),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/admin/assignments"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/assignments"] });
       toast({
         title: "Success",
         description: "Assignment deleted successfully",
@@ -160,23 +160,15 @@ export default function AdminAssignments() {
                     <span className="ml-2">{assignment.maxAttempts}</span>
                   </div>
                   <div>
-                    <span className="font-medium">Auto Grade:</span>
-                    <Badge variant={assignment.autoGrade ? "default" : "secondary"} className="ml-2">
-                      {assignment.autoGrade ? "Yes" : "No"}
-                    </Badge>
+                    <span className="font-medium">Deadline:</span>
+                    <span className="ml-2">
+                      {assignment.deadline ? formatDate(assignment.deadline) : "No deadline"}
+                    </span>
                   </div>
                 </div>
-                
-                {assignment.deadline && (
-                  <div className="mt-4 flex items-center gap-2 text-sm text-muted-foreground">
-                    <Clock className="h-4 w-4" />
-                    <span>Due: {formatDate(assignment.deadline)}</span>
-                  </div>
-                )}
-                
-                <div className="mt-4 flex items-center gap-2 text-sm text-muted-foreground">
-                  <BookOpen className="h-4 w-4" />
-                  <span>Created: {formatDate(assignment.createdAt)}</span>
+                <div className="mt-4 text-xs text-muted-foreground">
+                  Created: {formatDate(assignment.createdAt)} • 
+                  Updated: {formatDate(assignment.updatedAt)}
                 </div>
               </CardContent>
             </Card>

@@ -1,107 +1,183 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { useLocation } from "wouter";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Input } from "@/components/ui/input";
-import { Search } from "lucide-react";
+import { Clock, BookOpen, FileText, Search } from "lucide-react";
 
 interface Assignment {
   id: number;
   title: string;
-  description: string;
-  dueDate: string;
-  problems: { id: number; title: string; points: number; }[];
+  description?: string;
+  courseTag: string;
+  deadline?: string;
+  questions: any[];
+  maxAttempts: number;
+  isVisible: boolean;
+  autoGrade: boolean;
+  createdBy?: string;
+  createdAt: string;
+  updatedAt: string;
 }
 
 export default function Assignments() {
-  const [searchTerm, setSearchTerm] = useState("");
+  const [selectedCourse, setSelectedCourse] = useState<string>("all");
+  const [searchQuery, setSearchQuery] = useState("");
+  const [, navigate] = useLocation();
 
   const { data: assignments, isLoading } = useQuery<Assignment[]>({
     queryKey: ["/api/assignments"],
-    retry: false,
   });
 
-  const filteredAssignments = assignments?.filter(assignment =>
-    assignment.title.toLowerCase().includes(searchTerm.toLowerCase())
-  ) || [];
+  const courseTags = Array.from(new Set(assignments?.map(a => a.courseTag) || []));
+
+  const filteredAssignments = assignments?.filter(assignment => {
+    const matchesCourse = selectedCourse === "all" || assignment.courseTag === selectedCourse;
+    const matchesSearch = assignment.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                         assignment.description?.toLowerCase().includes(searchQuery.toLowerCase());
+    return matchesCourse && matchesSearch;
+  }) || [];
+
+  const formatDate = (dateString: string) => {
+    return new Date(dateString).toLocaleDateString();
+  };
+
+  const getDeadlineStatus = (deadline?: string) => {
+    if (!deadline) return null;
+    const now = new Date();
+    const deadlineDate = new Date(deadline);
+    const diffTime = deadlineDate.getTime() - now.getTime();
+    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+    
+    if (diffDays < 0) return { status: "overdue", text: "Overdue", variant: "destructive" as const };
+    if (diffDays === 0) return { status: "today", text: "Due Today", variant: "destructive" as const };
+    if (diffDays <= 3) return { status: "soon", text: `Due in ${diffDays} days`, variant: "secondary" as const };
+    return { status: "upcoming", text: `Due in ${diffDays} days`, variant: "outline" as const };
+  };
+
+  if (isLoading) {
+    return (
+      <div className="container mx-auto p-6">
+        <div className="flex items-center justify-center h-64">
+          <div className="text-lg">Loading assignments...</div>
+        </div>
+      </div>
+    );
+  }
 
   return (
-    <div className="p-6">
-      <div className="mb-8">
-        <h1 className="text-2xl font-bold text-gray-900 dark:text-white mb-2">
-          Assignments
-        </h1>
-        <p className="text-gray-600 dark:text-gray-400">
-          View and complete your assigned coding tasks.
-        </p>
+    <div className="container mx-auto p-6">
+      <div className="mb-6">
+        <h1 className="text-3xl font-bold mb-2">Assignments</h1>
+        <p className="text-muted-foreground">Complete assignments to test your knowledge and skills</p>
       </div>
 
-      <Card className="mb-6">
-        <CardHeader>
-          <CardTitle className="flex items-center space-x-2">
-            <Search className="h-5 w-5" />
-            <span>Search Assignments</span>
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
+      {/* Filters */}
+      <div className="flex flex-col sm:flex-row gap-4 mb-6">
+        <div className="flex items-center gap-2 flex-1">
+          <Search className="h-4 w-4 text-muted-foreground" />
           <Input
             placeholder="Search assignments..."
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className="max-w-sm"
           />
-        </CardContent>
-      </Card>
-
-      {isLoading ? (
-        <div className="grid gap-4">
-          {[...Array(3)].map((_, i) => (
-            <Card key={i} className="animate-pulse">
-              <CardContent className="p-6">
-                <div className="h-6 bg-gray-200 dark:bg-gray-700 rounded w-1/4 mb-2"></div>
-                <div className="h-4 bg-gray-200 dark:bg-gray-700 rounded w-3/4 mb-4"></div>
-                <div className="flex space-x-2">
-                  <div className="h-6 bg-gray-200 dark:bg-gray-700 rounded w-32"></div>
-                  <div className="h-6 bg-gray-200 dark:bg-gray-700 rounded w-24"></div>
-                </div>
-              </CardContent>
-            </Card>
-          ))}
         </div>
-      ) : (
-        <div className="grid gap-4">
-          {filteredAssignments.map((assignment) => (
-            <Card key={assignment.id}>
-              <CardContent className="p-6">
-                <div className="flex items-center justify-between">
-                  <div className="flex-1">
-                    <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-2">
-                      {assignment.title}
-                    </h3>
-                    <p className="text-gray-600 dark:text-gray-400 text-sm mb-3">
-                      {assignment.description}
-                    </p>
-                    <div className="flex items-center space-x-4 text-sm text-gray-500 dark:text-gray-400">
-                      <div>Due: {new Date(assignment.dueDate).toLocaleDateString()}</div>
-                      <div>{assignment.problems.length} problems</div>
+        <Select value={selectedCourse} onValueChange={setSelectedCourse}>
+          <SelectTrigger className="w-full sm:w-48">
+            <SelectValue placeholder="Filter by course" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All Courses</SelectItem>
+            {courseTags.map(tag => (
+              <SelectItem key={tag} value={tag}>{tag}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
+
+      {/* Assignments Grid */}
+      <div className="grid gap-6">
+        {filteredAssignments.length === 0 ? (
+          <Card>
+            <CardContent className="flex flex-col items-center justify-center h-64">
+              <BookOpen className="h-12 w-12 text-muted-foreground mb-4" />
+              <div className="text-muted-foreground mb-2">No assignments found</div>
+              <p className="text-sm text-muted-foreground text-center">
+                {searchQuery || selectedCourse !== "all" 
+                  ? "Try adjusting your search or filter criteria"
+                  : "Check back later for new assignments"
+                }
+              </p>
+            </CardContent>
+          </Card>
+        ) : (
+          filteredAssignments.map((assignment: Assignment) => {
+            const deadlineStatus = getDeadlineStatus(assignment.deadline);
+            const totalPoints = assignment.questions.reduce((sum, q) => sum + (q.points || 1), 0);
+            
+            return (
+              <Card key={assignment.id} className="hover:shadow-md transition-shadow">
+                <CardHeader>
+                  <div className="flex justify-between items-start">
+                    <div className="flex-1">
+                      <div className="flex items-center gap-2 mb-2">
+                        <CardTitle className="text-xl">{assignment.title}</CardTitle>
+                        <Badge variant="outline">{assignment.courseTag}</Badge>
+                        {deadlineStatus && (
+                          <Badge variant={deadlineStatus.variant}>
+                            <Clock className="h-3 w-3 mr-1" />
+                            {deadlineStatus.text}
+                          </Badge>
+                        )}
+                      </div>
+                      <CardDescription className="text-base">
+                        {assignment.description || "No description provided"}
+                      </CardDescription>
+                    </div>
+                    <Button onClick={() => navigate(`/assignments/${assignment.id}`)}>
+                      <FileText className="h-4 w-4 mr-2" />
+                      Start Assignment
+                    </Button>
+                  </div>
+                </CardHeader>
+                <CardContent>
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+                    <div>
+                      <span className="font-medium text-muted-foreground">Questions:</span>
+                      <div className="font-medium">{assignment.questions.length}</div>
+                    </div>
+                    <div>
+                      <span className="font-medium text-muted-foreground">Total Points:</span>
+                      <div className="font-medium">{totalPoints}</div>
+                    </div>
+                    <div>
+                      <span className="font-medium text-muted-foreground">Max Attempts:</span>
+                      <div className="font-medium">{assignment.maxAttempts}</div>
+                    </div>
+                    <div>
+                      <span className="font-medium text-muted-foreground">Created:</span>
+                      <div className="font-medium">{formatDate(assignment.createdAt)}</div>
                     </div>
                   </div>
-                </div>
-              </CardContent>
-            </Card>
-          ))}
-        </div>
-      )}
-
-      {!isLoading && filteredAssignments.length === 0 && (
-        <Card>
-          <CardContent className="p-12 text-center">
-            <div className="text-gray-500 dark:text-gray-400">
-              <Search className="h-12 w-12 mx-auto mb-4 opacity-50" />
-              <h3 className="text-lg font-medium mb-2">No assignments found</h3>
-              <p>Try adjusting your search criteria.</p>
-            </div>
-          </CardContent>
-        </Card>
-      )}
+                  
+                  {assignment.deadline && (
+                    <div className="mt-4 p-3 bg-muted/50 rounded-lg">
+                      <div className="text-sm">
+                        <span className="font-medium">Deadline: </span>
+                        {new Date(assignment.deadline).toLocaleString()}
+                      </div>
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            );
+          })
+        )}
+      </div>
     </div>
   );
-} 
+}
