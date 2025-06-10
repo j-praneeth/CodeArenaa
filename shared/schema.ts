@@ -95,17 +95,77 @@ export const insertUserProgressSchema = z.object({
   solvedAt: z.date().optional(),
 });
 
+// Assignment Question schemas
+export const mcqOptionSchema = z.object({
+  id: z.string(),
+  text: z.string(),
+  isCorrect: z.boolean(),
+});
+
+export const assignmentQuestionSchema = z.object({
+  id: z.string(),
+  type: z.enum(["mcq", "coding"]),
+  title: z.string(),
+  description: z.string(),
+  points: z.number().default(1),
+  
+  // MCQ specific fields
+  options: z.array(mcqOptionSchema).optional(),
+  
+  // Coding specific fields
+  problemStatement: z.string().optional(),
+  inputFormat: z.string().optional(),
+  outputFormat: z.string().optional(),
+  examples: z.array(exampleSchema).optional(),
+  testCases: z.array(testCaseSchema).optional(),
+  hiddenTestCases: z.array(testCaseSchema).optional(),
+  starterCode: starterCodeSchema.optional(),
+  timeLimit: z.number().optional(),
+  memoryLimit: z.number().optional(),
+});
+
 export const insertAssignmentSchema = z.object({
   title: z.string(),
   description: z.string().optional(),
-  problems: z.array(z.number()).optional(),
-  assignedTo: z.array(z.string()).optional(),
-  assignmentType: z.string(),
-  dueDate: z.date().optional(),
+  courseTag: z.string(), // e.g., "JavaScript", "DSA", "Python"
+  deadline: z.date().optional(),
+  questions: z.array(assignmentQuestionSchema),
   maxAttempts: z.number().default(3),
   isVisible: z.boolean().default(true),
   autoGrade: z.boolean().default(true),
   createdBy: z.string().optional(),
+});
+
+// Assignment Submission schemas
+export const questionSubmissionSchema = z.object({
+  questionId: z.string(),
+  type: z.enum(["mcq", "coding"]),
+  
+  // MCQ submission
+  selectedOptionId: z.string().optional(),
+  
+  // Coding submission
+  code: z.string().optional(),
+  language: z.string().optional(),
+  
+  // Results
+  isCorrect: z.boolean().optional(),
+  score: z.number().optional(),
+  feedback: z.string().optional(),
+  runtime: z.number().optional(),
+  memory: z.number().optional(),
+});
+
+export const insertAssignmentSubmissionSchema = z.object({
+  assignmentId: z.number(),
+  userId: z.string(),
+  questionSubmissions: z.array(questionSubmissionSchema),
+  totalScore: z.number().default(0),
+  maxScore: z.number(),
+  status: z.enum(["in_progress", "submitted", "graded"]).default("in_progress"),
+  submittedAt: z.date().optional(),
+  gradedAt: z.date().optional(),
+  feedback: z.string().optional(),
 });
 
 export const insertGroupSchema = z.object({
@@ -144,6 +204,10 @@ export type InsertContest = z.infer<typeof insertContestSchema>;
 export type InsertCourse = z.infer<typeof insertCourseSchema>;
 export type InsertUserProgress = z.infer<typeof insertUserProgressSchema>;
 export type InsertAssignment = z.infer<typeof insertAssignmentSchema>;
+export type InsertAssignmentSubmission = z.infer<typeof insertAssignmentSubmissionSchema>;
+export type AssignmentQuestion = z.infer<typeof assignmentQuestionSchema>;
+export type QuestionSubmission = z.infer<typeof questionSubmissionSchema>;
+export type MCQOption = z.infer<typeof mcqOptionSchema>;
 export type InsertGroup = z.infer<typeof insertGroupSchema>;
 export type InsertContestParticipant = z.infer<typeof insertContestParticipantSchema>;
 export type InsertAnnouncement = z.infer<typeof insertAnnouncementSchema>;
