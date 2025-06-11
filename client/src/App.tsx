@@ -36,7 +36,7 @@ import { useAuth } from "@/hooks/useAuth";
 
 function AppContent() {
   const { user, isLoading, isAuthenticated } = useAuth();
-  const [, setLocation] = useLocation();
+  const [location, setLocation] = useLocation();
 
   // Public route wrapper
   const PublicRoute = ({ children }: { children: React.ReactNode }) => {
@@ -82,9 +82,7 @@ function AppContent() {
       {isAuthenticated ? (
         <Layout>
           <Switch>
-            <Route path="/">
-              <Redirect to="/dashboard" />
-            </Route>
+            <Route path="/" component={() => <Redirect to="/dashboard" />} />
             <Route path="/dashboard">
               <Dashboard />
             </Route>
