@@ -1,119 +1,99 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef } from 'react';
+import * as monaco from 'monaco-editor';
+
+// Configure worker paths
+(self as any).MonacoEnvironment = {
+  getWorkerUrl: function (moduleId: string, label: string) {
+    const getWorkerUrl = (path: string) => {
+      return new URL(path, import.meta.url).href;
+    };
+
+    switch (label) {
+      case 'json':
+        return getWorkerUrl('monaco-editor/esm/vs/language/json/json.worker.js');
+      case 'css':
+      case 'scss':
+      case 'less':
+        return getWorkerUrl('monaco-editor/esm/vs/language/css/css.worker.js');
+      case 'html':
+      case 'handlebars':
+      case 'razor':
+        return getWorkerUrl('monaco-editor/esm/vs/language/html/html.worker.js');
+      case 'typescript':
+      case 'javascript':
+        return getWorkerUrl('monaco-editor/esm/vs/language/typescript/ts.worker.js');
+      default:
+        return getWorkerUrl('monaco-editor/esm/vs/editor/editor.worker.js');
+    }
+  }
+};
 
 interface MonacoEditorProps {
   value: string;
   onChange: (value: string) => void;
-  language: string;
+  language?: string;
   height?: string;
-  theme?: string;
+  readOnly?: boolean;
 }
 
 export function MonacoEditor({ 
   value, 
   onChange, 
-  language, 
-  height = "400px",
-  theme = "vs-dark" 
+  language = 'javascript', 
+  height = '400px',
+  readOnly = false 
 }: MonacoEditorProps) {
   const editorRef = useRef<HTMLDivElement>(null);
-  const monacoInstanceRef = useRef<any>(null);
+  const monacoEditorRef = useRef<monaco.editor.IStandaloneCodeEditor | null>(null);
 
   useEffect(() => {
-    const loadMonaco = async () => {
-      if (!editorRef.current) return;
+    if (editorRef.current && !monacoEditorRef.current) {
+      monacoEditorRef.current = monaco.editor.create(editorRef.current, {
+        value,
+        language,
+        theme: 'vs-dark',
+        automaticLayout: true,
+        readOnly,
+        minimap: { enabled: false },
+        scrollBeyondLastLine: false,
+        fontSize: 14,
+        tabSize: 2,
+        wordWrap: 'on',
+        folding: true,
+        lineNumbers: 'on',
+        renderLineHighlight: 'all',
+        selectOnLineNumbers: true,
+        matchBrackets: 'always',
+      });
 
-      try {
-        // Dynamically import Monaco Editor
-        const monaco = await import("monaco-editor");
-
-        // Configure Monaco
-        monaco.editor.defineTheme("custom-dark", {
-          base: "vs-dark",
-          inherit: true,
-          rules: [],
-          colors: {
-            "editor.background": "#1e1e1e",
-          },
-        });
-
-        // Create editor instance
-        const editor = monaco.editor.create(editorRef.current, {
-          value,
-          language,
-          theme: theme === "vs-dark" ? "custom-dark" : "vs",
-          fontSize: 14,
-          fontFamily: "JetBrains Mono, Monaco, Consolas, monospace",
-          minimap: { enabled: false },
-          scrollBeyondLastLine: false,
-          automaticLayout: true,
-          wordWrap: "on",
-          lineNumbers: "on",
-          folding: true,
-          selectOnLineNumbers: true,
-          roundedSelection: false,
-          readOnly: false,
-          cursorStyle: "line",
-          cursorBlinking: "solid",
-        });
-
-        // Handle value changes
-        editor.onDidChangeModelContent(() => {
-          const newValue = editor.getValue();
-          onChange(newValue);
-        });
-
-        monacoInstanceRef.current = editor;
-
-        // Cleanup function
-        return () => {
-          editor.dispose();
-        };
-      } catch (error) {
-        console.error("Failed to load Monaco Editor:", error);
-        // Fallback to textarea
-        const textarea = document.createElement("textarea");
-        textarea.value = value;
-        textarea.className = "w-full h-full p-4 bg-gray-900 text-white font-mono text-sm resize-none border-0 outline-none";
-        textarea.style.minHeight = height;
-        textarea.addEventListener("input", (e) => {
-          onChange((e.target as HTMLTextAreaElement).value);
-        });
-
-        if (editorRef.current) {
-          editorRef.current.appendChild(textarea);
-        }
-      }
-    };
-
-    loadMonaco();
+      const editor = monacoEditorRef.current;
+      editor.onDidChangeModelContent(() => {
+        onChange(editor.getValue());
+      });
+    }
 
     return () => {
-      if (monacoInstanceRef.current) {
-        monacoInstanceRef.current.dispose();
+      if (monacoEditorRef.current) {
+        monacoEditorRef.current.dispose();
+        monacoEditorRef.current = null;
       }
     };
   }, []);
 
   useEffect(() => {
-    if (monacoInstanceRef.current && monacoInstanceRef.current.getValue() !== value) {
-      monacoInstanceRef.current.setValue(value);
+    if (monacoEditorRef.current && monacoEditorRef.current.getValue() !== value) {
+      monacoEditorRef.current.setValue(value);
     }
   }, [value]);
 
   useEffect(() => {
-    if (monacoInstanceRef.current) {
-      const monaco = monacoInstanceRef.current.getModel();
-      if (monaco) {
-        (window as any).monaco?.editor.setModelLanguage(monaco, language);
+    if (monacoEditorRef.current) {
+      const model = monacoEditorRef.current.getModel();
+      if (model) {
+        monaco.editor.setModelLanguage(model, language);
       }
     }
   }, [language]);
 
-  return (
-    <div 
-      ref={editorRef} 
-      style={{ height }}
-      className="border border-gray-200 dark:border-gray-700 rounded-lg overflow-hidden"
-    />
-  );
+  return <div ref={editorRef} style={{ height }} />;
 }

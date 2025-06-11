@@ -404,7 +404,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-
   // Course Module routes
   app.get('/api/courses/:id/modules', async (req, res) => {
     try {
@@ -841,7 +840,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ message: "Assignment already submitted" });
       }
 
-      The code includes a PUT endpoint for updating courses, secured with authentication and admin authorization, allowing modification of course title, description, and public status.      // Submit the assignment
+      // Submit the assignment
       const submittedAssignment = await storage.submitAssignment(assignmentId, userId);
       res.json(submittedAssignment);
     } catch (error) {
