@@ -177,7 +177,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Add DELETE endpoint for problems
-  app.delete('/api/problems/:id', isAuthenticated, requireAdmin, async (req: any, res) => {
+  app.delete('/api/problems/:id', protect, requireAdmin, async (req: AuthRequest, res) => {
     try {
       const problemId = parseInt(req.params.id);
       
@@ -199,9 +199,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Submission routes
-  app.get('/api/submissions', isAuthenticated, async (req: any, res) => {
+  app.get('/api/submissions', protect, async (req: AuthRequest, res) => {
     try {
-      const userId = req.user.sub || req.user.claims?.sub || req.user.id;
+      const userId = req.user.id;
       if (!userId) {
         console.error('[DEBUG] No user ID found in request:', req.user);
         return res.status(401).json({ message: "User ID not found" });
@@ -217,9 +217,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post('/api/submissions', isAuthenticated, async (req: any, res) => {
+  app.post('/api/submissions', protect, async (req: AuthRequest, res) => {
     try {
-      const userId = req.user.sub || req.user.claims?.sub || req.user.id;
+      const userId = req.user.id;
       if (!userId) {
         console.error('[DEBUG] No user ID found in request:', req.user);
         return res.status(401).json({ message: "User ID not found" });
@@ -272,9 +272,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // User stats route
-  app.get('/api/users/me/stats', isAuthenticated, async (req: any, res) => {
+  app.get('/api/users/me/stats', protect, async (req: AuthRequest, res) => {
     try {
-      const userId = req.user.user.id;
+      const userId = req.user.id;
       if (!userId) {
         console.error('[DEBUG] No user ID found in request:', req.user);
         return res.status(401).json({ message: "User ID not found" });
@@ -313,9 +313,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post('/api/contests', isAuthenticated, async (req: any, res) => {
+  app.post('/api/contests', protect, requireAdmin, async (req: AuthRequest, res) => {
     try {
-      const userId = req.user.claims.sub;
+      const userId = req.user.id;
       const user = await storage.getUser(userId);
       
       if (user?.role !== 'admin') {
@@ -412,7 +412,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post('/api/courses/:id/modules', isAuthenticated, requireAdmin, async (req: any, res) => {
+  app.post('/api/courses/:id/modules', protect, requireAdmin, async (req: AuthRequest, res) => {
     try {
       const courseId = parseInt(req.params.id);
       const validatedData = insertCourseModuleSchema.parse({
@@ -431,7 +431,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.put('/api/modules/:id', isAuthenticated, requireAdmin, async (req: any, res) => {
+  app.put('/api/modules/:id', protect, requireAdmin, async (req: AuthRequest, res) => {
     try {
       const id = parseInt(req.params.id);
       const validatedData = insertCourseModuleSchema.partial().parse(req.body);
@@ -447,7 +447,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.delete('/api/modules/:id', isAuthenticated, requireAdmin, async (req: any, res) => {
+  app.delete('/api/modules/:id', protect, requireAdmin, async (req: AuthRequest, res) => {
     try {
       const id = parseInt(req.params.id);
       await storage.deleteCourseModule(id);
@@ -459,9 +459,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Course Enrollment routes
-  app.post('/api/courses/:id/enroll', isAuthenticated, async (req: any, res) => {
+  app.post('/api/courses/:id/enroll', protect, async (req: AuthRequest, res) => {
     try {
-      const userId = req.user.user.id;
+      const userId = req.user.id;
       if (!userId) {
         return res.status(401).json({ message: "User ID not found" });
       }
@@ -475,9 +475,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.get('/api/users/me/enrollments', isAuthenticated, async (req: any, res) => {
+  app.get('/api/users/me/enrollments', protect, async (req: AuthRequest, res) => {
     try {
-      const userId = req.user.user.id;
+      const userId = req.user.id;
       if (!userId) {
         return res.status(401).json({ message: "User ID not found" });
       }
@@ -490,9 +490,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.get('/api/courses/:id/progress', isAuthenticated, async (req: any, res) => {
+  app.get('/api/courses/:id/progress', protect, async (req: AuthRequest, res) => {
     try {
-      const userId = req.user.user.id;
+      const userId = req.user.id;
       if (!userId) {
         return res.status(401).json({ message: "User ID not found" });
       }
@@ -506,9 +506,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post('/api/courses/:courseId/modules/:moduleId/complete', isAuthenticated, async (req: any, res) => {
+  app.post('/api/courses/:courseId/modules/:moduleId/complete', protect, async (req: AuthRequest, res) => {
     try {
-      const userId = req.user.user.id;
+      const userId = req.user.id;
       if (!userId) {
         return res.status(401).json({ message: "User ID not found" });
       }
@@ -525,7 +525,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Code execution route for course modules
-  app.post('/api/modules/execute', isAuthenticated, async (req: any, res) => {
+  app.post('/api/modules/execute', protect, async (req: AuthRequest, res) => {
     try {
       const { code, language } = req.body;
       
@@ -562,7 +562,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Assignment routes
-  app.get('/api/assignments', isAuthenticated, async (req: any, res) => {
+  app.get('/api/assignments', protect, async (req: AuthRequest, res) => {
     try {
       const assignments = await storage.getAssignments();
       res.json(assignments);
@@ -572,7 +572,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.get('/api/assignments/:id', isAuthenticated, async (req: any, res) => {
+  app.get('/api/assignments/:id', protect, async (req: AuthRequest, res) => {
     try {
       console.log('[DEBUG] Fetching assignment:', req.params.id);
       const id = parseInt(req.params.id);
@@ -596,9 +596,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post('/api/assignments', isAuthenticated, requireAdmin, async (req: any, res) => {
+  app.post('/api/assignments', protect, requireAdmin, async (req: AuthRequest, res) => {
     try {
-      const userId = req.user.sub || req.user.claims?.sub || req.user.id;
+      const userId = req.user.id;
       if (!userId) {
         console.error('[DEBUG] No user ID found in request:', req.user);
         return res.status(401).json({ message: "User ID not found" });
@@ -666,7 +666,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.put('/api/assignments/:id', isAuthenticated, requireAdmin, async (req: any, res) => {
+  app.put('/api/assignments/:id', protect, requireAdmin, async (req: AuthRequest, res) => {
     try {
       const id = parseInt(req.params.id);
       const assignment = await storage.updateAssignment(id, req.body);
@@ -680,7 +680,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.delete('/api/assignments/:id', isAuthenticated, requireAdmin, async (req: any, res) => {
+  app.delete('/api/assignments/:id', protect, requireAdmin, async (req: AuthRequest, res) => {
     try {
       const id = parseInt(req.params.id);
       await storage.deleteAssignment(id);
@@ -692,7 +692,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Assignment filtering by course tag
-  app.get('/api/assignments/course/:courseTag', isAuthenticated, async (req: any, res) => {
+  app.get('/api/assignments/course/:courseTag', protect, async (req: AuthRequest, res) => {
     try {
       const courseTag = req.params.courseTag;
       const assignments = await storage.getAssignmentsByCourseTag(courseTag);
@@ -704,10 +704,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Assignment submission routes
-  app.get('/api/assignments/:id/submissions', isAuthenticated, async (req: any, res) => {
+  app.get('/api/assignments/:id/submissions', protect, async (req: AuthRequest, res) => {
     try {
       const assignmentId = parseInt(req.params.id);
-      const userId = req.user.claims.sub;
+      const userId = req.user.id;
       const user = await storage.getUser(userId);
       
       if (user?.role === 'admin') {
@@ -725,10 +725,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.get('/api/assignments/:id/submission', isAuthenticated, async (req: any, res) => {
+  app.get('/api/assignments/:id/submission', protect, async (req: AuthRequest, res) => {
     try {
       const assignmentId = parseInt(req.params.id);
-      const userId = req.user.sub || req.user.claims?.sub || req.user.id;
+      const userId = req.user.id;
       
       console.log('[DEBUG] Fetching submission:', { assignmentId, userId });
       
@@ -747,10 +747,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post('/api/assignments/:id/submission', isAuthenticated, async (req: any, res) => {
+  app.post('/api/assignments/:id/submission', protect, async (req: AuthRequest, res) => {
     try {
       const assignmentId = parseInt(req.params.id);
-      const userId = req.user.sub || req.user.claims?.sub || req.user.id;
+      const userId = req.user.id;
       
       if (!userId) {
         console.error('[DEBUG] No user ID found in request:', req.user);
@@ -795,10 +795,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post('/api/assignments/:id/submit', isAuthenticated, async (req: any, res) => {
+  app.post('/api/assignments/:id/submit', protect, async (req: AuthRequest, res) => {
     try {
       const assignmentId = parseInt(req.params.id);
-      const userId = req.user.sub || req.user.claims?.sub || req.user.id;
+      const userId = req.user.id;
       
       if (!userId) {
         console.error('[DEBUG] No user ID found in request:', req.user);
@@ -832,7 +832,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Code execution for coding problems
-  app.post('/api/execute', isAuthenticated, async (req, res) => {
+  app.post('/api/execute', protect, async (req: AuthRequest, res) => {
     try {
       const { code, language, input } = req.body;
       
@@ -846,9 +846,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Group routes
-  app.get('/api/groups', isAuthenticated, async (req: any, res) => {
+  app.get('/api/groups', protect, async (req: AuthRequest, res) => {
     try {
-      const userId = req.user.user.id;
+      const userId = req.user.id;
       const groups = await storage.getUserGroups(userId);
       res.json(groups);
     } catch (error) {
@@ -857,9 +857,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post('/api/groups', isAuthenticated, requireAdmin, async (req: any, res) => {
+  app.post('/api/groups', protect, requireAdmin, async (req: AuthRequest, res) => {
     try {
-      const userId = req.user.user.id;
+      const userId = req.user.id;
 
       const validatedData = insertGroupSchema.parse({
         ...req.body,
@@ -878,9 +878,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Announcement routes
-  app.get('/api/announcements', isAuthenticated, async (req: any, res) => {
+  app.get('/api/announcements', protect, async (req: AuthRequest, res) => {
     try {
-      const userId = req.user.claims.sub;
+      const userId = req.user.id;
       const announcements = await storage.getUserAnnouncements(userId);
       res.json(announcements);
     } catch (error) {
@@ -889,9 +889,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post('/api/announcements', isAuthenticated, async (req: any, res) => {
+  app.post('/api/announcements', protect, requireAdmin, async (req: AuthRequest, res) => {
     try {
-      const userId = req.user.claims.sub;
+      const userId = req.user.id;
       const user = await storage.getUser(userId);
       
       if (user?.role !== 'admin') {
@@ -915,10 +915,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Contest participation
-  app.post('/api/contests/:id/participate', isAuthenticated, async (req: any, res) => {
+  app.post('/api/contests/:id/participate', protect, async (req: AuthRequest, res) => {
     try {
       const contestId = parseInt(req.params.id);
-      const userId = req.user._id;
+      const userId = req.user.id;
 
       const contest = await storage.getContest(contestId);
       if (!contest) {
@@ -951,7 +951,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Admin routes
-  app.patch('/api/admin/users/:id/role', isAuthenticated, requireAdmin, async (req: any, res) => {
+  app.patch('/api/admin/users/:id/role', protect, requireAdmin, async (req: AuthRequest, res) => {
     try {
       
       const targetUserId = req.params.id;
