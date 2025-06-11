@@ -184,6 +184,17 @@ export default function Courses() {
             </Button>
           )}
 
+          {user?.role === 'admin' && (
+            <Button 
+              onClick={() => setLocation('/courses')}
+              variant="outline"
+              className="w-full mb-4"
+            >
+              <Users className="h-4 w-4 mr-2" />
+              Manage Courses
+            </Button>
+          )}
+
           {enrolledCourses.length > 0 && (
             <>
               <h3 className="font-semibold mb-3">My Courses</h3>

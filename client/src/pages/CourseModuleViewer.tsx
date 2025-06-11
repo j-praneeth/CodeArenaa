@@ -235,21 +235,21 @@ export default function CourseModuleViewer() {
         </div>
       </div>
 
-      {/* Main Content */}
+      {/* Main Content - 3-Section Layout */}
       <div className="flex-1 overflow-hidden">
         <ResizablePanelGroup direction="horizontal">
-          {/* Left Panel - Course Content */}
-          <ResizablePanel defaultSize={30} minSize={20}>
+          {/* Left Panel - Resizable Content Area */}
+          <ResizablePanel defaultSize={35} minSize={25} maxSize={50}>
             <div className="h-full flex flex-col">
-              {/* Module Navigation */}
-              <div className="border-b bg-muted/50 p-4">
-                <h3 className="font-semibold mb-3">Course Modules</h3>
-                <ScrollArea className="h-32">
-                  <div className="space-y-2">
+              {/* Module Navigation Header */}
+              <div className="border-b bg-muted/50 p-3">
+                <h3 className="font-semibold text-sm">Course Modules</h3>
+                <ScrollArea className="h-24 mt-2">
+                  <div className="space-y-1">
                     {modules.map((module) => (
                       <div
                         key={module.id}
-                        className={`p-2 rounded cursor-pointer transition-colors ${
+                        className={`p-2 rounded text-xs cursor-pointer transition-colors ${
                           module.id === currentModule.id
                             ? 'bg-primary text-primary-foreground'
                             : 'hover:bg-muted'
@@ -257,9 +257,9 @@ export default function CourseModuleViewer() {
                         onClick={() => navigateToModule(module)}
                       >
                         <div className="flex items-center justify-between">
-                          <span className="text-sm font-medium">{module.title}</span>
+                          <span className="font-medium truncate">{module.title}</span>
                           {progress?.enrollment.completedModules.includes(module.id) && (
-                            <CheckCircle className="h-4 w-4 text-green-500" />
+                            <CheckCircle className="h-3 w-3 text-green-500 flex-shrink-0" />
                           )}
                         </div>
                       </div>
@@ -268,83 +268,79 @@ export default function CourseModuleViewer() {
                 </ScrollArea>
               </div>
 
-              {/* Content Area */}
-              <div className="flex-1 p-4 overflow-hidden">
-                <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as 'text' | 'video')}>
-                  <TabsList className="grid w-full grid-cols-2">
-                    <TabsTrigger value="text" className="flex items-center space-x-2">
-                      <BookOpen className="h-4 w-4" />
-                      <span>Reading</span>
-                    </TabsTrigger>
-                    <TabsTrigger 
-                      value="video" 
-                      disabled={!currentModule.videoUrl}
-                      className="flex items-center space-x-2"
-                    >
-                      <PlayCircle className="h-4 w-4" />
-                      <span>Video</span>
-                    </TabsTrigger>
-                  </TabsList>
-
-                  <TabsContent value="text" className="mt-4">
-                    <ScrollArea className="h-[calc(100vh-300px)]">
-                      <Card>
-                        <CardHeader>
-                          <CardTitle>{currentModule.title}</CardTitle>
-                          {currentModule.description && (
-                            <p className="text-muted-foreground">{currentModule.description}</p>
-                          )}
-                        </CardHeader>
-                        <CardContent>
-                          <div className="prose dark:prose-invert max-w-none">
-                            {currentModule.textContent ? (
-                              <div dangerouslySetInnerHTML={{ __html: currentModule.textContent }} />
-                            ) : (
-                              <p>No text content available for this module.</p>
-                            )}
+              {/* Content Sub-sections */}
+              <div className="flex-1 flex flex-col overflow-hidden">
+                {/* Text Content Section */}
+                <div className="flex-1 min-h-0">
+                  <div className="bg-muted/30 border-b px-3 py-2 flex items-center">
+                    <BookOpen className="h-4 w-4 mr-2" />
+                    <span className="font-medium text-sm">Learning Content</span>
+                  </div>
+                  <ScrollArea className="h-full p-3">
+                    <div className="space-y-3">
+                      <h4 className="font-semibold">{currentModule.title}</h4>
+                      {currentModule.description && (
+                        <p className="text-sm text-muted-foreground">{currentModule.description}</p>
+                      )}
+                      <div className="prose prose-sm dark:prose-invert max-w-none">
+                        {currentModule.textContent ? (
+                          <div style={{ whiteSpace: 'pre-wrap' }}>
+                            {currentModule.textContent}
                           </div>
-                        </CardContent>
-                      </Card>
-                    </ScrollArea>
-                  </TabsContent>
+                        ) : (
+                          <p className="text-muted-foreground italic">No text content available for this module.</p>
+                        )}
+                      </div>
+                    </div>
+                  </ScrollArea>
+                </div>
 
-                  <TabsContent value="video" className="mt-4">
+                <ResizableHandle />
+
+                {/* Video Content Section */}
+                <div className="flex-1 min-h-0">
+                  <div className="bg-muted/30 border-b px-3 py-2 flex items-center">
+                    <PlayCircle className="h-4 w-4 mr-2" />
+                    <span className="font-medium text-sm">Video Learning</span>
+                  </div>
+                  <div className="h-full p-3 flex items-center justify-center">
                     {currentModule.videoUrl ? (
-                      <div className="aspect-video">
+                      <div className="w-full aspect-video max-h-full">
                         <iframe
                           src={currentModule.videoUrl.replace('watch?v=', 'embed/')}
-                          className="w-full h-full rounded-lg"
+                          className="w-full h-full rounded border"
                           allowFullScreen
                           title={currentModule.title}
                         />
                       </div>
                     ) : (
-                      <Card>
-                        <CardContent className="p-6 text-center text-muted-foreground">
-                          No video content available for this module.
-                        </CardContent>
-                      </Card>
+                      <div className="text-center text-muted-foreground">
+                        <PlayCircle className="h-8 w-8 mx-auto mb-2 opacity-50" />
+                        <p className="text-sm">No video content available</p>
+                      </div>
                     )}
-                  </TabsContent>
-                </Tabs>
+                  </div>
+                </div>
               </div>
             </div>
           </ResizablePanel>
 
           <ResizableHandle />
 
-          {/* Right Panel - Code Editor and Output */}
-          <ResizablePanel defaultSize={70} minSize={40}>
+          {/* Right Panel - Code Editor (75%) and Output (25%) */}
+          <ResizablePanel defaultSize={65} minSize={50}>
             <ResizablePanelGroup direction="vertical">
-              {/* Code Editor */}
-              <ResizablePanel defaultSize={75} minSize={30}>
+              {/* Code Editor Section - 75% height */}
+              <ResizablePanel defaultSize={75} minSize={60} maxSize={85}>
                 <div className="h-full flex flex-col">
                   <div className="bg-muted/50 border-b px-4 py-2 flex items-center justify-between">
                     <div className="flex items-center space-x-2">
                       <Code className="h-4 w-4" />
-                      <span className="font-medium">Code Editor</span>
+                      <span className="font-medium">Monaco Code Editor</span>
                       {currentModule.language && (
-                        <Badge variant="secondary">{currentModule.language}</Badge>
+                        <Badge variant="secondary" className="text-xs">
+                          {currentModule.language}
+                        </Badge>
                       )}
                     </div>
                     <Button
@@ -368,27 +364,33 @@ export default function CourseModuleViewer() {
 
               <ResizableHandle />
 
-              {/* Output Panel */}
-              <ResizablePanel defaultSize={25} minSize={15}>
+              {/* Output Section - 25% height */}
+              <ResizablePanel defaultSize={25} minSize={15} maxSize={40}>
                 <div className="h-full flex flex-col">
-                  <div className="bg-muted/50 border-b px-4 py-2">
-                    <span className="font-medium">Output</span>
+                  <div className="bg-muted/50 border-b px-4 py-2 flex items-center justify-between">
+                    <span className="font-medium">Code Output & Results</span>
+                    <Badge variant="outline" className="text-xs">
+                      {isExecuting ? 'Running' : 'Ready'}
+                    </Badge>
                   </div>
                   <ScrollArea className="flex-1 p-4">
-                    <pre className="text-sm font-mono whitespace-pre-wrap">
-                      {output || 'Run your code to see the output here...'}
-                    </pre>
-                    {currentModule.expectedOutput && (
-                      <>
-                        <Separator className="my-4" />
+                    <div className="space-y-4">
+                      <div>
+                        <h5 className="text-sm font-medium mb-2">Output:</h5>
+                        <pre className="text-xs font-mono whitespace-pre-wrap bg-muted/30 p-3 rounded border min-h-[60px]">
+                          {output || 'Run your code to see the output here...'}
+                        </pre>
+                      </div>
+                      
+                      {currentModule.expectedOutput && (
                         <div>
-                          <p className="text-sm font-medium mb-2">Expected Output:</p>
-                          <pre className="text-sm font-mono whitespace-pre-wrap text-muted-foreground">
+                          <h5 className="text-sm font-medium mb-2">Expected Output:</h5>
+                          <pre className="text-xs font-mono whitespace-pre-wrap text-muted-foreground bg-muted/20 p-3 rounded border">
                             {currentModule.expectedOutput}
                           </pre>
                         </div>
-                      </>
-                    )}
+                      )}
+                    </div>
                   </ScrollArea>
                 </div>
               </ResizablePanel>
