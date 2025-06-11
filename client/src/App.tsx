@@ -33,6 +33,8 @@ import AdminCourses from "@/pages/admin/courses";
 import CreateCourse from "@/pages/admin/CreateCourse";
 import AdminLeaderboard from "@/pages/admin/leaderboard";
 import { useAuth } from "@/hooks/useAuth";
+import CourseDetail from "@/pages/CourseDetail"; // Assuming you have this component
+import EditCourse from "@/pages/admin/EditCourse"; // Assuming you have this component
 
 function AppContent() {
   const { user, isLoading, isAuthenticated } = useAuth();
@@ -125,9 +127,24 @@ function AppContent() {
             <Route path="/leaderboard">
               {user?.role === 'admin' ? <AdminLeaderboard /> : <Leaderboard />}
             </Route>
+            <Route path="/admin/courses">
+              <AdminRoute>
+                <AdminCourses />
+              </AdminRoute>
+            </Route>
             <Route path="/admin/courses/create">
               <AdminRoute>
                 <CreateCourse />
+              </AdminRoute>
+            </Route>
+            <Route path="/admin/courses/:courseId">
+              <AdminRoute>
+                <CourseDetail />
+              </AdminRoute>
+            </Route>
+            <Route path="/admin/courses/:courseId/edit">
+              <AdminRoute>
+                <EditCourse />
               </AdminRoute>
             </Route>
             <Route path="/admin">

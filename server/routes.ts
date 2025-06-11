@@ -508,6 +508,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Get course enrollments (for admin)
+  app.get('/api/courses/:id/enrollments', protect, requireAdmin, async (req: AuthRequest, res) => {
+    try {
+      const courseId = parseInt(req.params.id);
+      const enrollments = await storage.getCourseEnrollments(courseId);
+      res.json(enrollments);
+    } catch (error) {
+      console.error("Error fetching course enrollments:", error);
+      res.status(500).json({ message: "Failed to fetch course enrollments" });
+    }
+  });
+
   app.get('/api/courses/:id/progress', protect, async (req: AuthRequest, res) => {
     try {
       const userId = req.user.id;
