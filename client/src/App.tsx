@@ -22,6 +22,7 @@ import AuthCallback from '@/pages/auth/AuthCallback';
 import { useLocation } from 'wouter';
 import { config } from '@/config';
 import Courses from "@/pages/Courses";
+import CourseModuleViewer from "@/pages/CourseModuleViewer";
 import Assignments from "@/pages/Assignments";
 import AssignmentSubmission from "@/pages/AssignmentSubmission";
 import AdminAssignments from "@/pages/AdminAssignments";
@@ -97,6 +98,9 @@ function AppContent() {
             </Route>
             <Route path="/courses">
               {user?.role === 'admin' ? <AdminCourses /> : <Courses />}
+            </Route>
+            <Route path="/courses/:courseId/modules/:moduleId">
+              <CourseModuleViewer />
             </Route>
             <Route path="/assignments">
               {user?.role === 'admin' ? <AdminAssignments /> : <Assignments />}
