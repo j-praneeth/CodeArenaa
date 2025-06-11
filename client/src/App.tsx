@@ -33,8 +33,8 @@ import AdminCourses from "@/pages/admin/courses";
 import CreateCourse from "@/pages/admin/CreateCourse";
 import AdminLeaderboard from "@/pages/admin/leaderboard";
 import { useAuth } from "@/hooks/useAuth";
-import CourseDetail from "@/pages/CourseDetail"; // Assuming you have this component
-import EditCourse from "@/pages/admin/EditCourse"; // Assuming you have this component
+import CourseDetail from "@/pages/admin/CourseDetail";
+import EditCourse from "@/pages/admin/EditCourse";
 
 function AppContent() {
   const { user, isLoading, isAuthenticated } = useAuth();
