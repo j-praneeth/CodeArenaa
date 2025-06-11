@@ -344,7 +344,7 @@ export interface IStorage {
   getAnnouncements(): Promise<Announcement[]>;
   getAnnouncement(id: number): Promise<Announcement | undefined>;
   createAnnouncement(announcement: InsertAnnouncement): Promise<Announcement>;
-  updateAnnouncement(id: number, announcement: Partial<InsertAnnouncement>): Promise<Announcement>;
+  updateAnnouncement(id: number, announcement: Partial<Announcement>): Promise<Announcement>;
   deleteAnnouncement(id: number): Promise<void>;
   getUserAnnouncements(userId: string): Promise<Announcement[]>;
   getAdminAnalytics(): Promise<{
@@ -1378,3 +1378,100 @@ export class MongoStorage implements IStorage {
 }
 
 export const storage = new MongoStorage();
+
+// Mock code execution function for course modules
+export function mockExecuteCode(code: string, language: string) {
+  try {
+    // Basic validation
+    if (!code || !code.trim()) {
+      return {
+        status: 'error',
+        actualOutput: '',
+        error: 'No code provided',
+        runtime: 0,
+        memory: 0
+      };
+    }
+
+    // Mock execution based on language
+    let output = '';
+    let error = null;
+
+    switch (language.toLowerCase()) {
+      case 'javascript':
+        try {
+          // Simple eval for basic JavaScript (in a real system, use a proper sandbox)
+          const result = eval(code);
+          output = result !== undefined ? String(result) : '';
+        } catch (e) {
+          error = `JavaScript Error: ${e.message}`;
+        }
+        break;
+
+      case 'python':
+        // Mock Python execution
+        if (code.includes('print(')) {
+          const matches = code.match(/print\(['"](.+?)['"]\)/g);
+          if (matches) {
+            output = matches.map(match => {
+              const content = match.match(/print\(['"](.+?)['"]\)/);
+              return content ? content[1] : '';
+            }).join('\n');
+          }
+        } else {
+          output = 'Python code executed successfully (mock)';
+        }
+        break;
+
+      case 'java':
+        // Mock Java execution
+        if (code.includes('System.out.println')) {
+          const matches = code.match(/System\.out\.println\(['"](.+?)['"]\)/g);
+          if (matches) {
+            output = matches.map(match => {
+              const content = match.match(/System\.out\.println\(['"](.+?)['"]\)/);
+              return content ? content[1] : '';
+            }).join('\n');
+          }
+        } else {
+          output = 'Java code compiled and executed successfully (mock)';
+        }
+        break;
+
+      case 'cpp':
+      case 'c++':
+        // Mock C++ execution
+        if (code.includes('cout')) {
+          const matches = code.match(/cout\s*<<\s*['"](.+?)['"]/g);
+          if (matches) {
+            output = matches.map(match => {
+              const content = match.match(/cout\s*<<\s*['"](.+?)['"]/);
+              return content ? content[1] : '';
+            }).join('\n');
+          }
+        } else {
+          output = 'C++ code compiled and executed successfully (mock)';
+        }
+        break;
+
+      default:
+        output = `Code executed successfully in ${language} (mock)`;
+    }
+
+    return {
+      status: error ? 'error' : 'accepted',
+      actualOutput: output,
+      error: error,
+      runtime: Math.floor(Math.random() * 100) + 10, // Mock runtime
+      memory: Math.floor(Math.random() * 50) + 10 // Mock memory usage
+    };
+  } catch (e) {
+    return {
+      status: 'error',
+      actualOutput: '',
+      error: `Execution error: ${e.message}`,
+      runtime: 0,
+      memory: 0
+    };
+  }
+}

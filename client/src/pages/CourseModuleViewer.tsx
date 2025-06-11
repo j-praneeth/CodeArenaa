@@ -123,22 +123,38 @@ export default function CourseModuleViewer() {
     mutationFn: async ({ code, language }: { code: string; language: string }) => {
       const response = await fetch('/api/modules/execute', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${localStorage.getItem('token')}`
+        },
         body: JSON.stringify({ code, language })
       });
-      if (!response.ok) throw new Error('Failed to execute code');
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({ message: 'Unknown error' }));
+        throw new Error(errorData.message || 'Failed to execute code');
+      }
       return response.json();
     },
     onSuccess: (result) => {
-      setOutput(result.error || result.output || 'No output');
-      if (result.success) {
-        toast({ title: 'Code executed successfully!' });
+      if (result.error) {
+        setOutput(`Error: ${result.error}`);
+        toast({ 
+          title: 'Code execution error', 
+          description: result.error,
+          variant: 'destructive' 
+        });
+      } else {
+        setOutput(result.output || 'No output');
+        if (result.success) {
+          toast({ title: 'Code executed successfully!' });
+        }
       }
     },
-    onError: () => {
+    onError: (error: Error) => {
+      setOutput(`Execution failed: ${error.message}`);
       toast({ 
         title: 'Execution failed', 
-        description: 'Failed to execute code',
+        description: error.message,
         variant: 'destructive' 
       });
     },
@@ -169,9 +185,17 @@ export default function CourseModuleViewer() {
   });
 
   const executeCode = () => {
-    if (!currentModule?.language || !code.trim()) return;
+    if (!currentModule?.language || !code.trim()) {
+      toast({
+        title: 'Cannot execute code',
+        description: 'Please enter some code and ensure the language is set',
+        variant: 'destructive'
+      });
+      return;
+    }
     
     setIsExecuting(true);
+    setOutput('Executing code...');
     executeCodeMutation.mutate({
       code: code.trim(),
       language: currentModule.language
