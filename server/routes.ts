@@ -10,6 +10,7 @@ import {
   insertCourseModuleSchema,
   insertCourseEnrollmentSchema,
   insertAssignmentSchema,
+  insertAssignmentSubmissionSchema,
   insertGroupSchema,
   insertAnnouncementSchema 
 } from "@shared/schema";
@@ -377,7 +378,23 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (!course) {
         return res.status(404).json({ message: 'Course not found' });
       }
-      res.json(course);
+
+      // Get additional course data
+      const [modules, enrollments] = await Promise.all([
+        storage.getCourseModules(id),
+        storage.getCourseEnrollments(id)
+      ]);
+
+      // Combine all data
+      const courseWithDetails = {
+        ...course,
+        modules,
+        enrolledUsers: enrollments.map(e => e.userId),
+        enrollmentCount: enrollments.length,
+        moduleCount: modules.length
+      };
+
+      res.json(courseWithDetails);
     } catch (error) {
       console.error('Error fetching course:', error);
       res.status(500).json({ message: 'Failed to fetch course' });
@@ -387,20 +404,63 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.put('/api/courses/:id', protect, requireAdmin, async (req: AuthRequest, res) => {
     try {
       const id = parseInt(req.params.id);
-      const updateData = {
+      const userId = req.user.id;
+
+      // Check if course exists
+      const existingCourse = await storage.getCourse(id);
+      if (!existingCourse) {
+        return res.status(404).json({ message: 'Course not found' });
+      }
+
+      // Validate the update data
+      const validatedData = insertCourseSchema.partial().parse({
         title: req.body.title,
         description: req.body.description,
         isPublic: req.body.isPublic,
-      };
+        updatedBy: userId,
+        updatedAt: new Date()
+      });
 
-      const course = await storage.updateCourse(id, updateData);
+      const course = await storage.updateCourse(id, validatedData);
+      res.json(course);
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ message: "Invalid data", errors: error.errors });
+      }
+      console.error('Error updating course:', error);
+      res.status(500).json({ message: 'Failed to update course' });
+    }
+  });
+
+  app.delete('/api/courses/:id', protect, requireAdmin, async (req: AuthRequest, res) => {
+    try {
+      const id = parseInt(req.params.id);
+
+      // Check if course exists
+      const course = await storage.getCourse(id);
       if (!course) {
         return res.status(404).json({ message: 'Course not found' });
       }
-      res.json(course);
+
+      // Get course modules and enrollments
+      const modules = await storage.getCourseModules(id);
+      const enrollments = await storage.getCourseEnrollments(id);
+
+      // Delete all related data
+      for (const module of modules) {
+        await storage.deleteCourseModule(module.id);
+      }
+
+      for (const enrollment of enrollments) {
+        await storage.deleteCourseEnrollment(enrollment.id);
+      }
+
+      // Finally delete the course
+      await storage.deleteCourse(id);
+      res.status(204).send();
     } catch (error) {
-      console.error('Error updating course:', error);
-      res.status(500).json({ message: 'Failed to update course' });
+      console.error('Error deleting course:', error);
+      res.status(500).json({ message: 'Failed to delete course' });
     }
   });
 
@@ -841,6 +901,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(404).json({ message: "Assignment not found" });
       }
 
+      // Check if assignment is visible
+      if (!assignment.isVisible) {
+        return res.status(403).json({ message: "Assignment is not available" });
+      }
+
+      // Check if assignment deadline has passed
+      if (assignment.deadline && new Date() > new Date(assignment.deadline)) {
+        return res.status(400).json({ message: "Assignment deadline has passed" });
+      }
+
       // Check if user has a submission
       const submission = await storage.getUserAssignmentSubmission(assignmentId, userId);
       if (!submission) {
@@ -852,11 +922,34 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ message: "Assignment already submitted" });
       }
 
+      // Get all submissions for this assignment by this user to check attempts
+      const allSubmissions = await storage.getAssignmentSubmissions(assignmentId, userId);
+      const submittedCount = allSubmissions.filter(s => s.status === 'submitted' || s.status === 'graded').length;
+      
+      // Check if user has exceeded maximum attempts
+      if (assignment.maxAttempts && submittedCount >= assignment.maxAttempts) {
+        return res.status(400).json({ message: "Maximum attempts exceeded" });
+      }
+
+      // Validate the submission data
+      const validatedData = insertAssignmentSubmissionSchema.parse({
+        ...submission,
+        status: 'submitted',
+        submittedAt: new Date()
+      });
+
       // Submit the assignment
-      const submittedAssignment = await storage.submitAssignment(assignmentId, userId);
+      const submittedAssignment = await storage.updateAssignmentSubmission(submission.id, {
+        status: 'submitted',
+        submittedAt: new Date()
+      });
+
       res.json(submittedAssignment);
     } catch (error) {
       console.error("Error submitting assignment:", error);
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ message: "Invalid submission data", errors: error.errors });
+      }
       res.status(500).json({ message: "Failed to submit assignment" });
     }
   });
@@ -1000,4 +1093,73 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   return server;
+}
+
+// Mock code execution function - replace with actual judge system
+function mockExecuteCode(code: string, language: string) {
+  // Mock test cases
+  const testCases = [
+    {
+      input: "nums = [2, 7, 11, 15], target = 9",
+      expectedOutput: "[0, 1]",
+      actualOutput: "[1, 0]" // simulated user's output
+    }
+  ];
+
+  // Simulate code execution for each test case
+  const testCase = testCases[0]; // Using first test case for now
+
+  // Simulate different execution scenarios
+  const scenarios = [
+    {
+      status: 'wrong_answer',
+      runtime: 100,
+      memory: 16,
+      score: "0.00",
+      actualOutput: testCase.actualOutput,
+      expectedOutput: testCase.expectedOutput,
+      error: null
+    },
+    {
+      status: 'time_limit_exceeded',
+      runtime: 2000,
+      memory: 16,
+      score: "0.00",
+      actualOutput: "Function took too long to execute",
+      expectedOutput: testCase.expectedOutput,
+      error: "Time limit exceeded: Function took longer than 1000ms to execute"
+    },
+    {
+      status: 'runtime_error',
+      runtime: 50,
+      memory: 16,
+      score: "0.00",
+      actualOutput: null,
+      expectedOutput: testCase.expectedOutput,
+      error: "TypeError: Cannot read property 'length' of undefined"
+    },
+    {
+      status: 'accepted',
+      runtime: 95,
+      memory: 16,
+      score: "100.00",
+      actualOutput: testCase.expectedOutput,
+      expectedOutput: testCase.expectedOutput,
+      error: null
+    }
+  ];
+
+  // Randomly select a scenario (for testing purposes)
+  const result = scenarios[Math.floor(Math.random() * scenarios.length)];
+
+  return {
+    status: result.status,
+    runtime: result.runtime,
+    memory: result.memory,
+    score: result.score,
+    actualOutput: result.actualOutput,
+    expectedOutput: result.expectedOutput,
+    error: result.error,
+    input: testCase.input
+  };
 }

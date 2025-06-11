@@ -475,8 +475,8 @@ export default function AdminDashboard() {
             </CardHeader>
             <CardContent>
               <div className="space-y-4">
-                {analytics?.recentActivity?.slice(0, 5).map((activity: any, index: number) => (
-                  <div key={index} className="flex items-center justify-between p-3 border rounded-lg">
+                {analytics?.recentActivity?.slice(0, 5).map((activity: any) => (
+                  <div key={`${activity.id}-${activity.timestamp}`} className="flex items-center justify-between p-3 border rounded-lg">
                     <div>
                       <p className="font-medium">Submission #{activity.id}</p>
                       <p className="text-sm text-muted-foreground">

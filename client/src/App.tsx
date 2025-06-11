@@ -35,6 +35,9 @@ import AdminLeaderboard from "@/pages/admin/leaderboard";
 import { useAuth } from "@/hooks/useAuth";
 import CourseDetail from "@/pages/admin/CourseDetail";
 import EditCourse from "@/pages/admin/EditCourse";
+import CreateModule from "@/pages/admin/CreateModule";
+import ModuleDetail from "@/pages/admin/ModuleDetail";
+import EditModule from "@/pages/admin/EditModule";
 
 function AppContent() {
   const { user, isLoading, isAuthenticated } = useAuth();
@@ -145,6 +148,21 @@ function AppContent() {
             <Route path="/admin/courses/:courseId/edit">
               <AdminRoute>
                 <EditCourse />
+              </AdminRoute>
+            </Route>
+            <Route path="/admin/courses/:courseId/modules/create">
+              <AdminRoute>
+                <CreateModule />
+              </AdminRoute>
+            </Route>
+            <Route path="/admin/modules/:moduleId">
+              <AdminRoute>
+                <ModuleDetail />
+              </AdminRoute>
+            </Route>
+            <Route path="/admin/modules/:moduleId/edit">
+              <AdminRoute>
+                <EditModule />
               </AdminRoute>
             </Route>
             <Route path="/admin">

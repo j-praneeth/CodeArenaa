@@ -1,114 +1,129 @@
-
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { useParams, useLocation } from 'wouter';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { useForm } from 'react-hook-form';
-import { zodResolver } from '@hookform/resolvers/zod';
-import { z } from 'zod';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Switch } from '@/components/ui/switch';
-import { ChevronLeft } from 'lucide-react';
-import { useToast } from '@/hooks/use-toast';
-
-const courseSchema = z.object({
-  title: z.string().min(1, 'Title is required').max(200, 'Title too long'),
-  description: z.string().max(1000, 'Description too long').optional(),
-  isPublic: z.boolean().default(true),
-});
-
-type CourseForm = z.infer<typeof courseSchema>;
+import { Label } from '@/components/ui/label';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { ChevronLeft, Save, Loader2 } from 'lucide-react';
+import axios from 'axios';
 
 interface Course {
   id: number;
   title: string;
   description?: string;
   isPublic: boolean;
+  createdAt: string;
+  updatedAt?: string;
 }
 
-export default function EditCourse() {
-  const { courseId } = useParams<{ courseId: string }>();
-  const [, setLocation] = useLocation();
-  const { toast } = useToast();
-  const queryClient = useQueryClient();
+const api = axios.create({
+  baseURL: '/api',
+});
 
-  const form = useForm<CourseForm>({
-    resolver: zodResolver(courseSchema),
-    defaultValues: {
-      title: '',
-      description: '',
-      isPublic: true,
-    },
+export default function EditCourse() {
+  const { courseId: courseIdParam } = useParams<{ courseId: string }>();
+  const [, setLocation] = useLocation();
+  const queryClient = useQueryClient();
+  const courseId = courseIdParam ? parseInt(courseIdParam) : NaN;
+
+  const [formData, setFormData] = useState<Partial<Course>>({
+    title: '',
+    description: '',
+    isPublic: false,
   });
 
-  // Fetch course data
   const { data: course, isLoading } = useQuery({
     queryKey: ['course', courseId],
     queryFn: async () => {
-      const response = await fetch(`/api/courses/${courseId}`);
-      if (!response.ok) throw new Error('Failed to fetch course');
-      return response.json() as Promise<Course>;
-    }
+      if (!courseId || isNaN(courseId)) {
+        throw new Error('Course ID is required');
+      }
+      const response = await api.get(`/courses/${courseId}`);
+      const courseData = response.data;
+      setFormData({
+        title: courseData.title,
+        description: courseData.description || '',
+        isPublic: courseData.isPublic,
+      });
+      return courseData;
+    },
+    enabled: !!courseId && !isNaN(courseId),
   });
 
-  // Update form when course data loads
-  useEffect(() => {
-    if (course) {
-      form.reset({
-        title: course.title,
-        description: course.description || '',
-        isPublic: course.isPublic,
-      });
-    }
-  }, [course, form]);
-
-  const updateCourseMutation = useMutation({
-    mutationFn: async (data: CourseForm) => {
-      const response = await fetch(`/api/courses/${courseId}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(data),
-      });
-      if (!response.ok) throw new Error('Failed to update course');
-      return response.json();
+  const updateCourse = useMutation({
+    mutationFn: async (data: Partial<Course>) => {
+      if (!courseId || isNaN(courseId)) {
+        throw new Error('Course ID is required');
+      }
+      const response = await api.put(`/courses/${courseId}`, data);
+      return response.data;
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['courses'] });
       queryClient.invalidateQueries({ queryKey: ['course', courseId] });
-      toast({ title: 'Course updated successfully!' });
-      setLocation('/courses');
+      queryClient.invalidateQueries({ queryKey: ['courses'] });
+      alert('Course updated successfully');
+      setLocation('/admin/courses');
     },
-    onError: () => {
-      toast({
-        title: 'Failed to update course',
-        variant: 'destructive'
-      });
-    }
+    onError: (error: any) => {
+      alert(error.response?.data?.message || 'Failed to update course');
+    },
   });
 
-  const onSubmit = (data: CourseForm) => {
-    updateCourseMutation.mutate(data);
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    
+    if (!courseId || isNaN(courseId)) {
+      alert('Course ID is missing');
+      return;
+    }
+    
+    // Validate form data
+    if (!formData.title?.trim()) {
+      alert('Course title is required');
+      return;
+    }
+
+    updateCourse.mutate(formData);
   };
+
+  if (!courseId || isNaN(courseId)) {
+    return (
+      <div className="container mx-auto py-8">
+        <div className="text-center">
+          <h1 className="text-2xl font-bold mb-4">Invalid Course ID</h1>
+          <p className="text-muted-foreground mb-4">
+            The course ID is missing or invalid.
+          </p>
+          <Button onClick={() => setLocation('/admin/courses')}>
+            <ChevronLeft className="h-4 w-4 mr-2" />
+            Back to Courses
+          </Button>
+        </div>
+      </div>
+    );
+  }
 
   if (isLoading) {
     return (
-      <div className="flex items-center justify-center h-64">
-        <div className="text-center">
-          <h2 className="text-2xl font-bold mb-2">Loading Course...</h2>
-        </div>
+      <div className="flex items-center justify-center min-h-screen">
+        <Loader2 className="h-8 w-8 animate-spin text-primary" />
       </div>
     );
   }
 
   if (!course) {
     return (
-      <div className="flex items-center justify-center h-64">
+      <div className="container mx-auto py-8">
         <div className="text-center">
-          <h2 className="text-2xl font-bold mb-2">Course Not Found</h2>
-          <Button onClick={() => setLocation('/courses')}>
+          <h1 className="text-2xl font-bold mb-4">Course Not Found</h1>
+          <p className="text-muted-foreground mb-4">
+            The course you're looking for doesn't exist or has been deleted.
+          </p>
+          <Button onClick={() => setLocation('/admin/courses')}>
+            <ChevronLeft className="h-4 w-4 mr-2" />
             Back to Courses
           </Button>
         </div>
@@ -117,102 +132,86 @@ export default function EditCourse() {
   }
 
   return (
-    <div className="container mx-auto py-8 max-w-4xl">
+    <div className="container mx-auto py-8">
       <div className="mb-8">
         <Button 
           variant="ghost" 
-          onClick={() => setLocation('/courses')}
+          onClick={() => setLocation(`/admin/courses/${courseId}`)}
           className="mb-4"
         >
           <ChevronLeft className="h-4 w-4 mr-2" />
-          Back to Courses
+          Back to Course
         </Button>
-        <h1 className="text-3xl font-bold">Edit Course</h1>
+        
+        <h1 className="text-3xl font-bold mb-2">Edit Course</h1>
         <p className="text-muted-foreground">
-          Update the course details and settings.
+          Update the course details below
         </p>
       </div>
 
       <Card>
         <CardHeader>
-          <CardTitle>Course Details</CardTitle>
-          <CardDescription>
-            Modify the basic information about your course
-          </CardDescription>
+          <CardTitle>Course Information</CardTitle>
         </CardHeader>
         <CardContent>
-          <Form {...form}>
-            <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
-              <FormField
-                control={form.control}
-                name="title"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Course Title</FormLabel>
-                    <FormControl>
-                      <Input placeholder="Introduction to JavaScript" {...field} />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
+          <form onSubmit={handleSubmit} className="space-y-6">
+            <div className="space-y-2">
+              <Label htmlFor="title">Course Title</Label>
+              <Input
+                id="title"
+                value={formData.title}
+                onChange={(e) => setFormData({ ...formData, title: e.target.value })}
+                placeholder="Enter course title"
+                required
               />
+            </div>
 
-              <FormField
-                control={form.control}
-                name="description"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Course Description</FormLabel>
-                    <FormControl>
-                      <Textarea
-                        placeholder="Describe what students will learn in this course..."
-                        rows={4}
-                        {...field}
-                      />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
+            <div className="space-y-2">
+              <Label htmlFor="description">Description</Label>
+              <Textarea
+                id="description"
+                value={formData.description}
+                onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+                placeholder="Enter course description"
+                rows={4}
               />
+            </div>
 
-              <FormField
-                control={form.control}
-                name="isPublic"
-                render={({ field }) => (
-                  <FormItem className="flex flex-row items-center justify-between rounded-lg border p-4">
-                    <div className="space-y-0.5">
-                      <FormLabel className="text-base">Public Course</FormLabel>
-                      <p className="text-sm text-muted-foreground">
-                        Make this course visible to all users
-                      </p>
-                    </div>
-                    <FormControl>
-                      <Switch
-                        checked={field.value}
-                        onCheckedChange={field.onChange}
-                      />
-                    </FormControl>
-                  </FormItem>
-                )}
+            <div className="flex items-center space-x-2">
+              <Switch
+                id="isPublic"
+                checked={formData.isPublic}
+                onCheckedChange={(checked) => setFormData({ ...formData, isPublic: checked })}
               />
+              <Label htmlFor="isPublic">Make this course public</Label>
+            </div>
 
-              <div className="flex gap-4">
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={() => setLocation('/courses')}
-                >
-                  Cancel
-                </Button>
-                <Button
-                  type="submit"
-                  disabled={updateCourseMutation.isPending}
-                >
-                  {updateCourseMutation.isPending ? 'Updating...' : 'Update Course'}
-                </Button>
-              </div>
-            </form>
-          </Form>
+            <div className="flex justify-end space-x-4">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setLocation(`/admin/courses/${courseId}`)}
+              >
+                Cancel
+              </Button>
+              <Button 
+                type="submit"
+                disabled={updateCourse.isPending}
+              >
+                {updateCourse.isPending ? (
+                  <>
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                    Saving...
+                  </>
+                ) : (
+                  <>
+                    <Save className="h-4 w-4 mr-2" />
+                    Save Changes
+                  </>
+                )}
+              </Button>
+            </div>
+          </form>
         </CardContent>
       </Card>
     </div>

@@ -1,4 +1,3 @@
-
 import { useState } from 'react';
 import { useParams, useLocation } from 'wouter';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
@@ -8,80 +7,78 @@ import { Badge } from '@/components/ui/badge';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog';
-import { ChevronLeft, Edit, Trash2, Users, BookOpen, Plus, Play, Eye, Settings } from 'lucide-react';
+import { ChevronLeft, Edit, Trash2, Users, BookOpen, Plus, Play, Eye, Settings, Loader2 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
+import axios from 'axios';
 
 interface Course {
   id: number;
   title: string;
   description?: string;
-  modules?: number[];
-  enrolledUsers?: string[];
   isPublic: boolean;
-  createdBy?: string;
   createdAt: string;
-  updatedAt: string;
+  updatedAt?: string;
+  moduleCount?: number;
+  enrollmentCount?: number;
+  modules?: CourseModule[];
+  enrollments?: CourseEnrollment[];
 }
 
 interface CourseModule {
   id: number;
-  courseId: number;
   title: string;
   description?: string;
-  textContent?: string;
-  videoUrl?: string;
-  codeExample?: string;
-  language?: string;
-  expectedOutput?: string;
   order: number;
-  createdAt: string;
-  updatedAt: string;
+  courseId: number;
 }
 
 interface CourseEnrollment {
   id: number;
-  courseId: number;
   userId: string;
-  completedModules: number[];
+  courseId: number;
   progress: number;
-  enrolledAt: string;
-  lastAccessedAt: string;
+  completedModules: number[];
+  createdAt?: string;
+  enrolledAt?: string;
+  user?: {
+    firstName?: string;
+    lastName?: string;
+    email?: string;
+  };
 }
 
 export default function CourseDetail() {
-  const { courseId } = useParams<{ courseId: string }>();
+  const { courseId: courseIdParam } = useParams<{ courseId: string }>();
   const [, setLocation] = useLocation();
   const { toast } = useToast();
   const queryClient = useQueryClient();
+  
+  const courseId = courseIdParam ? parseInt(courseIdParam) : NaN;
 
-  // Fetch course data
+  // Fetch course data with all details
   const { data: course, isLoading: courseLoading } = useQuery({
     queryKey: ['course', courseId],
     queryFn: async () => {
+      if (!courseId || isNaN(courseId)) {
+        throw new Error('Course ID is required');
+      }
       const response = await fetch(`/api/courses/${courseId}`);
       if (!response.ok) throw new Error('Failed to fetch course');
       return response.json() as Promise<Course>;
-    }
+    },
+    enabled: !!courseId && !isNaN(courseId),
   });
 
-  // Fetch course modules
-  const { data: modules = [], isLoading: modulesLoading } = useQuery({
-    queryKey: ['course-modules', courseId],
-    queryFn: async () => {
-      const response = await fetch(`/api/courses/${courseId}/modules`);
-      if (!response.ok) throw new Error('Failed to fetch modules');
-      return response.json() as Promise<CourseModule[]>;
-    }
-  });
-
-  // Fetch course enrollments
+  // Get additional data if needed
   const { data: enrollments = [], isLoading: enrollmentsLoading } = useQuery({
     queryKey: ['course-enrollments', courseId],
     queryFn: async () => {
+      if (!courseId || isNaN(courseId)) return [];
       const response = await fetch(`/api/courses/${courseId}/enrollments`);
       if (!response.ok) throw new Error('Failed to fetch enrollments');
       return response.json() as Promise<CourseEnrollment[]>;
-    }
+    },
+    enabled: !!courseId && !isNaN(courseId),
   });
 
   const deleteCourseMutation = useMutation({
@@ -108,6 +105,32 @@ export default function CourseDetail() {
     deleteCourseMutation.mutate();
   };
 
+  const deleteModuleMutation = useMutation({
+    mutationFn: async (moduleId: number) => {
+      const response = await fetch(`/api/modules/${moduleId}`, {
+        method: 'DELETE'
+      });
+      if (!response.ok) {
+        throw new Error('Failed to delete module');
+      }
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['course', courseId] });
+      toast({ title: 'Module deleted successfully' });
+    },
+    onError: (error: any) => {
+      toast({
+        title: 'Failed to delete module',
+        variant: 'destructive',
+        description: error.message || 'Failed to delete module'
+      });
+    },
+  });
+
+  const handleDeleteModule = (moduleId: number) => {
+    deleteModuleMutation.mutate(moduleId);
+  };
+
   const formatDate = (dateString: string) => {
     return new Date(dateString).toLocaleDateString('en-US', {
       year: 'numeric',
@@ -123,6 +146,23 @@ export default function CourseDetail() {
     const totalProgress = enrollments.reduce((sum, enrollment) => sum + enrollment.progress, 0);
     return Math.round(totalProgress / enrollments.length);
   };
+
+  if (!courseId || isNaN(courseId)) {
+    return (
+      <div className="container mx-auto py-8">
+        <div className="text-center">
+          <h1 className="text-2xl font-bold mb-4">Invalid Course ID</h1>
+          <p className="text-muted-foreground mb-4">
+            The course ID is missing or invalid.
+          </p>
+          <Button onClick={() => setLocation('/admin/courses')}>
+            <ChevronLeft className="h-4 w-4 mr-2" />
+            Back to Courses
+          </Button>
+        </div>
+      </div>
+    );
+  }
 
   if (courseLoading) {
     return (
@@ -146,6 +186,9 @@ export default function CourseDetail() {
       </div>
     );
   }
+
+  // Use modules from course data or default to empty array
+  const modules = course.modules || [];
 
   return (
     <div className="container mx-auto py-8">
@@ -172,6 +215,11 @@ export default function CourseDetail() {
               <span className="text-sm text-muted-foreground">
                 Created {formatDate(course.createdAt)}
               </span>
+              {course.updatedAt && (
+                <span className="text-sm text-muted-foreground">
+                  Last updated {formatDate(course.updatedAt)}
+                </span>
+              )}
             </div>
           </div>
           
@@ -215,52 +263,44 @@ export default function CourseDetail() {
       </div>
 
       {/* Course Stats */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8">
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
         <Card>
-          <CardContent className="p-4">
-            <div className="flex items-center space-x-2">
-              <BookOpen className="h-5 w-5 text-blue-500" />
+          <CardContent className="p-6">
+            <div className="flex items-center space-x-4">
+              <div className="p-2 bg-blue-100 rounded-lg">
+                <BookOpen className="h-6 w-6 text-blue-600" />
+              </div>
               <div>
-                <p className="text-2xl font-bold">{modules.length}</p>
-                <p className="text-sm text-muted-foreground">Modules</p>
+                <p className="text-2xl font-bold">{course.moduleCount || modules.length}</p>
+                <p className="text-sm text-muted-foreground">Course Modules</p>
               </div>
             </div>
           </CardContent>
         </Card>
 
         <Card>
-          <CardContent className="p-4">
-            <div className="flex items-center space-x-2">
-              <Users className="h-5 w-5 text-green-500" />
+          <CardContent className="p-6">
+            <div className="flex items-center space-x-4">
+              <div className="p-2 bg-green-100 rounded-lg">
+                <Users className="h-6 w-6 text-green-600" />
+              </div>
               <div>
-                <p className="text-2xl font-bold">{enrollments.length}</p>
-                <p className="text-sm text-muted-foreground">Students</p>
+                <p className="text-2xl font-bold">{course.enrollmentCount || enrollments.length}</p>
+                <p className="text-sm text-muted-foreground">Enrolled Students</p>
               </div>
             </div>
           </CardContent>
         </Card>
 
         <Card>
-          <CardContent className="p-4">
-            <div className="flex items-center space-x-2">
-              <Play className="h-5 w-5 text-orange-500" />
-              <div>
-                <p className="text-2xl font-bold">{calculateAverageProgress()}%</p>
-                <p className="text-sm text-muted-foreground">Avg Progress</p>
+          <CardContent className="p-6">
+            <div className="flex items-center space-x-4">
+              <div className="p-2 bg-purple-100 rounded-lg">
+                <Settings className="h-6 w-6 text-purple-600" />
               </div>
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardContent className="p-4">
-            <div className="flex items-center space-x-2">
-              <Eye className="h-5 w-5 text-purple-500" />
               <div>
-                <p className="text-2xl font-bold">
-                  {enrollments.filter(e => e.progress > 0).length}
-                </p>
-                <p className="text-sm text-muted-foreground">Active Students</p>
+                <p className="text-2xl font-bold">{course.isPublic ? 'Public' : 'Private'}</p>
+                <p className="text-sm text-muted-foreground">Course Status</p>
               </div>
             </div>
           </CardContent>
@@ -289,20 +329,24 @@ export default function CourseDetail() {
             </CardHeader>
             <CardContent>
               {modules.length === 0 ? (
-                <div className="text-center py-8 text-muted-foreground">
-                  <BookOpen className="h-12 w-12 mx-auto mb-4 opacity-50" />
-                  <p>No modules created yet</p>
-                  <p className="text-sm">Add modules to build your course content</p>
+                <div className="text-center py-8">
+                  <BookOpen className="h-12 w-12 mx-auto mb-4 text-muted-foreground opacity-50" />
+                  <h3 className="text-lg font-semibold mb-2">No Modules Yet</h3>
+                  <p className="text-muted-foreground mb-4">
+                    Start by adding your first course module.
+                  </p>
+                  <Button onClick={() => setLocation(`/admin/courses/${courseId}/modules/create`)}>
+                    <Plus className="h-4 w-4 mr-2" />
+                    Add First Module
+                  </Button>
                 </div>
               ) : (
                 <Table>
                   <TableHeader>
                     <TableRow>
+                      <TableHead>Module</TableHead>
+                      <TableHead>Description</TableHead>
                       <TableHead>Order</TableHead>
-                      <TableHead>Module Title</TableHead>
-                      <TableHead>Content Type</TableHead>
-                      <TableHead>Language</TableHead>
-                      <TableHead>Updated</TableHead>
                       <TableHead className="text-right">Actions</TableHead>
                     </TableRow>
                   </TableHeader>
@@ -310,48 +354,31 @@ export default function CourseDetail() {
                     {modules.map((module) => (
                       <TableRow key={module.id}>
                         <TableCell>
-                          <Badge variant="outline">#{module.order}</Badge>
+                          <div className="font-medium">{module.title}</div>
                         </TableCell>
                         <TableCell>
-                          <div>
-                            <p className="font-medium">{module.title}</p>
-                            {module.description && (
-                              <p className="text-sm text-muted-foreground truncate max-w-xs">
-                                {module.description}
-                              </p>
-                            )}
+                          <div className="text-sm text-muted-foreground truncate max-w-xs">
+                            {module.description}
                           </div>
                         </TableCell>
-                        <TableCell>
-                          <div className="flex gap-1">
-                            {module.textContent && <Badge variant="secondary" className="text-xs">Text</Badge>}
-                            {module.videoUrl && <Badge variant="secondary" className="text-xs">Video</Badge>}
-                            {module.codeExample && <Badge variant="secondary" className="text-xs">Code</Badge>}
-                          </div>
-                        </TableCell>
-                        <TableCell>
-                          {module.language && (
-                            <Badge variant="outline">{module.language}</Badge>
-                          )}
-                        </TableCell>
-                        <TableCell>
-                          {formatDate(module.updatedAt)}
-                        </TableCell>
+                        <TableCell>{module.order}</TableCell>
                         <TableCell className="text-right">
                           <div className="flex justify-end gap-2">
                             <Button
                               variant="ghost"
                               size="sm"
-                              onClick={() => setLocation(`/admin/modules/${module.id}`)}
+                              onClick={() => setLocation(`/admin/courses/${courseId}/modules/${module.id}/edit`)}
                             >
-                              <Eye className="h-4 w-4" />
+                              <Edit className="h-4 w-4 mr-2" />
+                              Edit
                             </Button>
                             <Button
                               variant="ghost"
                               size="sm"
-                              onClick={() => setLocation(`/admin/modules/${module.id}/edit`)}
+                              onClick={() => handleDeleteModule(module.id)}
                             >
-                              <Edit className="h-4 w-4" />
+                              <Trash2 className="h-4 w-4 mr-2" />
+                              Delete
                             </Button>
                           </div>
                         </TableCell>
@@ -366,55 +393,78 @@ export default function CourseDetail() {
 
         <TabsContent value="students">
           <Card>
-            <CardHeader>
-              <CardTitle>Enrolled Students ({enrollments.length})</CardTitle>
-              <CardDescription>
-                Track student progress and engagement
-              </CardDescription>
+            <CardHeader className="flex flex-row items-center justify-between">
+              <div>
+                <CardTitle>Enrolled Students ({enrollments.length})</CardTitle>
+                <CardDescription>
+                  Manage the students enrolled in this course
+                </CardDescription>
+              </div>
+              <Button onClick={() => setLocation(`/admin/courses/${courseId}/enrollments/create`)}>
+                <Plus className="h-4 w-4 mr-2" />
+                Add Student
+              </Button>
             </CardHeader>
             <CardContent>
               {enrollments.length === 0 ? (
-                <div className="text-center py-8 text-muted-foreground">
-                  <Users className="h-12 w-12 mx-auto mb-4 opacity-50" />
-                  <p>No students enrolled yet</p>
-                  <p className="text-sm">Students will appear here when they enroll in the course</p>
+                <div className="text-center py-8">
+                  <BookOpen className="h-12 w-12 mx-auto mb-4 text-muted-foreground opacity-50" />
+                  <h3 className="text-lg font-semibold mb-2">No Students Yet</h3>
+                  <p className="text-muted-foreground mb-4">
+                    Start by enrolling your first student.
+                  </p>
+                  <Button onClick={() => setLocation(`/admin/courses/${courseId}/enrollments/create`)}>
+                    <Plus className="h-4 w-4 mr-2" />
+                    Add First Student
+                  </Button>
                 </div>
               ) : (
                 <Table>
                   <TableHeader>
                     <TableRow>
-                      <TableHead>Student ID</TableHead>
+                      <TableHead>Student</TableHead>
                       <TableHead>Progress</TableHead>
                       <TableHead>Completed Modules</TableHead>
-                      <TableHead>Enrolled</TableHead>
-                      <TableHead>Last Access</TableHead>
+                      <TableHead>Enrolled At</TableHead>
+                      <TableHead className="text-right">Actions</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
                     {enrollments.map((enrollment) => (
                       <TableRow key={enrollment.id}>
-                        <TableCell className="font-medium">
-                          {enrollment.userId}
+                        <TableCell>
+                          <div className="font-medium">{enrollment.user?.firstName} {enrollment.user?.lastName}</div>
                         </TableCell>
                         <TableCell>
-                          <div className="flex items-center space-x-2">
-                            <div className="w-16 bg-muted rounded-full h-2">
-                              <div 
-                                className="bg-primary h-2 rounded-full" 
-                                style={{ width: `${enrollment.progress}%` }}
-                              />
-                            </div>
-                            <span className="text-sm font-medium">{enrollment.progress}%</span>
+                          <div className="text-sm text-muted-foreground truncate max-w-xs">
+                            {calculateAverageProgress()}%
                           </div>
                         </TableCell>
                         <TableCell>
-                          {enrollment.completedModules.length} / {modules.length}
+                          <div className="text-sm text-muted-foreground truncate max-w-xs">
+                            {enrollment.completedModules.length} / {modules.length}
+                          </div>
                         </TableCell>
-                        <TableCell>
-                          {formatDate(enrollment.enrolledAt)}
-                        </TableCell>
-                        <TableCell>
-                          {formatDate(enrollment.lastAccessedAt)}
+                        <TableCell>{formatDate(enrollment.enrolledAt || '')}</TableCell>
+                        <TableCell className="text-right">
+                          <div className="flex justify-end gap-2">
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => setLocation(`/admin/courses/${courseId}/enrollments/${enrollment.id}/edit`)}
+                            >
+                              <Edit className="h-4 w-4 mr-2" />
+                              Edit
+                            </Button>
+                                                         <Button
+                               variant="ghost"
+                               size="sm"
+                               onClick={() => alert('Delete enrollment functionality not implemented yet')}
+                             >
+                               <Trash2 className="h-4 w-4 mr-2" />
+                               Delete
+                             </Button>
+                          </div>
                         </TableCell>
                       </TableRow>
                     ))}
