@@ -363,21 +363,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.get('/api/courses/:id', async (req, res) => {
-    try {
-      const id = parseInt(req.params.id);
-      const course = await storage.getCourse(id);
-      if (!course) {
-        return res.status(404).json({ message: "Course not found" });
-      }
-      res.json(course);
-    } catch (error) {
-      console.error("Error fetching course:", error);
-      res.status(500).json({ message: "Failed to fetch course" });
-    }
-  });
-
-  app.post('/api/admin/courses', isAuthenticated, requireAdmin, async (req: any, res) => {
+  app.post('/api/courses', isAuthenticated, requireAdmin, async (req: any, res) => {
     try {
       const userId = req.user.user.id;
 
@@ -396,6 +382,22 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.status(500).json({ message: "Failed to create course" });
     }
   });
+
+  app.get('/api/courses/:id', async (req, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      const course = await storage.getCourse(id);
+      if (!course) {
+        return res.status(404).json({ message: "Course not found" });
+      }
+      res.json(course);
+    } catch (error) {
+      console.error("Error fetching course:", error);
+      res.status(500).json({ message: "Failed to fetch course" });
+    }
+  });
+
+  
 
   // Course Module routes
   app.get('/api/courses/:id/modules', async (req, res) => {
