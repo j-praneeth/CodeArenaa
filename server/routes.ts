@@ -377,7 +377,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post('/api/courses', isAuthenticated, requireAdmin, async (req: any, res) => {
+  app.post('/api/admin/courses', isAuthenticated, requireAdmin, async (req: any, res) => {
     try {
       const userId = req.user.user.id;
 
