@@ -352,9 +352,29 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Course routes
-  app.get('/api/courses', async (req, res) => {
+  app.get('/api/courses', async (req: any, res) => {
     try {
-      const courses = await storage.getCourses();
+      let courses;
+      
+      // Check if user is authenticated
+      if (req.user && req.user.user && req.user.user.id) {
+        const userId = req.user.user.id;
+        const user = await storage.getUser(userId);
+        
+        // If user is admin, show all courses (including private ones)
+        if (user && user.role === 'admin') {
+          const db = getDb();
+          const coursesCollection = db.collection('courses');
+          courses = await coursesCollection.find({}).sort({ id: 1 }).toArray();
+        } else {
+          // Regular users see only public courses
+          courses = await storage.getCourses();
+        }
+      } else {
+        // Non-authenticated users see only public courses
+        courses = await storage.getCourses();
+      }
+      
       res.json(courses);
     } catch (error) {
       console.error("Error fetching courses:", error);
