@@ -1,7 +1,7 @@
 import type { Express } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
-import { protect as isAuthenticated, requireAdmin } from "./middleware/auth";
+import { isAuthenticated } from "./replitAuth";
 import { 
   insertProblemSchema, 
   insertSubmissionSchema, 
@@ -15,13 +15,31 @@ import {
 } from "@shared/schema";
 import { z } from "zod";
 
+// Admin middleware for Replit auth
+const requireAdmin = async (req: any, res: any, next: any) => {
+  if (!req.isAuthenticated()) {
+    return res.status(401).json({ message: "Unauthorized" });
+  }
+  
+  const userId = req.user.user.id;
+  const user = await storage.getUser(userId);
+  
+  if (!user || user.role !== 'admin') {
+    return res.status(403).json({ message: "Admin access required" });
+  }
+  
+  next();
+};
+
 export async function registerRoutes(app: Express): Promise<Server> {
   const server = createServer(app);
 
   // Auth routes
   app.get('/api/auth/user', isAuthenticated, async (req: any, res) => {
     try {
-      res.json(req.user);
+      const userId = req.user.user.id;
+      const user = await storage.getUser(userId);
+      res.json(user);
     } catch (error) {
       console.error("Error fetching user:", error);
       res.status(500).json({ message: "Failed to fetch user" });
@@ -358,14 +376,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post('/api/courses', isAuthenticated, async (req: any, res) => {
+  app.post('/api/courses', isAuthenticated, requireAdmin, async (req: any, res) => {
     try {
-      const userId = req.user.claims.sub;
-      const user = await storage.getUser(userId);
-      
-      if (user?.role !== 'admin') {
-        return res.status(403).json({ message: "Only admins can create courses" });
-      }
+      const userId = req.user.user.id;
 
       const validatedData = insertCourseSchema.parse({
         ...req.body,
