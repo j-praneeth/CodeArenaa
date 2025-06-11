@@ -9,29 +9,21 @@ import passport from "passport";
 import session from "express-session";
 import cors from "cors";
 import { Request, Response, NextFunction } from "express";
-import { createServer } from "http";
 
 // Load environment variables
 dotenv.config();
 
 const app = express();
 
-// Enhanced CORS configuration
-const corsOptions = {
-  origin: [
-    'http://localhost:5000',
-    'http://localhost:3000',
-    'https://*.replit.dev',
-    'https://*.replit.app',
-    process.env.FRONTEND_URL
-  ].filter(Boolean),
-  credentials: true,
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization', 'x-replit-user-id']
-};
-
 // Enable CORS for development
-app.use(cors(corsOptions));
+app.use(cors({
+  origin: process.env.NODE_ENV === 'production' 
+    ? process.env.FRONTEND_URL || 'http://localhost:5000'
+    : 'http://localhost:5000',
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization']
+}));
 
 // Debug middleware to log all requests FIRST
 app.use((req, res, next) => {
@@ -68,24 +60,36 @@ app.use('/api/auth', (req, res, next) => {
   next();
 }, authRoutes);
 
-const server = createServer(app);
+(async () => {
+  // Connect to MongoDB first
+  await connectToMongoDB();
+  
+  const server = await registerRoutes(app);
 
-const PORT = parseInt(process.env.PORT ?? "5000", 10);
+  // Error handling middleware
+  app.use((err: Error, req: Request, res: Response, next: NextFunction) => {
+    console.error('[DEBUG] Error:', err);
+    res.status(500).json({ error: 'Internal Server Error' });
+  });
 
-// Initialize database connection before starting server
-async function startServer() {
-  try {
-    await connectToMongoDB();
-    console.log('[DEBUG] Database connected successfully');
-
-    server.listen(PORT, "0.0.0.0", () => {
-      console.log(`Server running on port ${PORT}`);
-      console.log(`Frontend URL: ${process.env.FRONTEND_URL || 'http://localhost:5000'}`);
-    });
-  } catch (error) {
-    console.error('[DEBUG] Failed to start server:', error);
-    process.exit(1);
+  // Setup Vite AFTER auth routes
+  if (app.get("env") === "development") {
+    await setupVite(app, server);
+  } else {
+    serveStatic(app);
   }
-}
 
-startServer();
+  const port = parseInt(process.env.PORT || '5000', 10);
+  const host = process.env.HOST || 'localhost';
+  
+  server.listen(port, host, () => {
+    log(`API Server running on http://${host}:${port}`);
+    
+    // Log environment check
+    log('Environment check:');
+    log(`- GOOGLE_CLIENT_ID: ${process.env.GOOGLE_CLIENT_ID ? 'Set' : 'Not set'}`);
+    log(`- GOOGLE_CLIENT_SECRET: ${process.env.GOOGLE_CLIENT_SECRET ? 'Set' : 'Not set'}`);
+    log(`- SESSION_SECRET: ${process.env.SESSION_SECRET ? 'Set' : 'Not set'}`);
+    log('----------------------------------------');
+  });
+})();
