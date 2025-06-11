@@ -508,19 +508,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       const courseId = parseInt(req.params.id);
-      const enrollment = await storage.getCourseEnrollment(courseId, userId);
-      const modules = await storage.getCourseModules(courseId);
-      
-      if (!enrollment) {
-        return res.status(404).json({ message: "Not enrolled in this course" });
-      }
-      
-      const progress = {
-        enrollment,
-        completedModules: modules.filter(m => enrollment.completedModules.includes(m.id)),
-        totalModules: modules.length
-      };
-      
+      const progress = await storage.getUserCourseProgress(courseId, userId);
       res.json(progress);
     } catch (error) {
       console.error("Error fetching course progress:", error);
