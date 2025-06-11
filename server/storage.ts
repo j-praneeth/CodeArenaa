@@ -76,11 +76,40 @@ export interface Course {
   title: string;
   description?: string;
   problems?: number[];
+  modules?: number[]; // References to course modules
   enrolledUsers?: string[];
   isPublic: boolean;
   createdBy?: string;
   createdAt: Date;
   updatedAt: Date;
+}
+
+export interface CourseModule {
+  _id?: ObjectId;
+  id: number;
+  courseId: number;
+  title: string;
+  description?: string;
+  order: number; // Order within the course
+  textContent?: string; // Text-based learning content
+  videoUrl?: string; // YouTube URL for video content
+  codeExample?: string; // Default code for the editor
+  language?: string; // Programming language for syntax highlighting
+  expectedOutput?: string; // Expected output for code execution
+  isCompleted?: boolean; // For user progress tracking
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export interface CourseEnrollment {
+  _id?: ObjectId;
+  id: number;
+  userId: string;
+  courseId: number;
+  enrolledAt: Date;
+  completedModules: number[]; // Array of completed module IDs
+  progress: number; // Percentage completion (0-100)
+  lastAccessedAt: Date;
 }
 
 export interface UserProgress {
@@ -219,6 +248,8 @@ export type InsertProblem = Omit<Problem, '_id' | 'id' | 'createdAt' | 'updatedA
 export type InsertSubmission = Omit<Submission, '_id' | 'id' | 'submittedAt'>;
 export type InsertContest = Omit<Contest, '_id' | 'id' | 'createdAt' | 'updatedAt'>;
 export type InsertCourse = Omit<Course, '_id' | 'id' | 'createdAt' | 'updatedAt'>;
+export type InsertCourseModule = Omit<CourseModule, '_id' | 'id' | 'createdAt' | 'updatedAt'>;
+export type InsertCourseEnrollment = Omit<CourseEnrollment, '_id' | 'id' | 'enrolledAt' | 'lastAccessedAt'>;
 export type InsertUserProgress = Omit<UserProgress, '_id' | 'id'>;
 export type InsertAssignment = Omit<Assignment, '_id' | 'id' | 'createdAt' | 'updatedAt'>;
 export type InsertAssignmentSubmission = Omit<AssignmentSubmission, '_id' | 'id' | 'createdAt' | 'updatedAt'>;
@@ -259,6 +290,25 @@ export interface IStorage {
   createCourse(course: InsertCourse): Promise<Course>;
   updateCourse(id: number, course: Partial<InsertCourse>): Promise<Course>;
   deleteCourse(id: number): Promise<void>;
+  
+  // Course Modules
+  getCourseModules(courseId: number): Promise<CourseModule[]>;
+  getCourseModule(id: number): Promise<CourseModule | undefined>;
+  createCourseModule(module: InsertCourseModule): Promise<CourseModule>;
+  updateCourseModule(id: number, module: Partial<InsertCourseModule>): Promise<CourseModule>;
+  deleteCourseModule(id: number): Promise<void>;
+  
+  // Course Enrollments
+  getCourseEnrollments(courseId?: number, userId?: string): Promise<CourseEnrollment[]>;
+  getCourseEnrollment(id: number): Promise<CourseEnrollment | undefined>;
+  getUserCourseEnrollment(courseId: number, userId: string): Promise<CourseEnrollment | undefined>;
+  createCourseEnrollment(enrollment: InsertCourseEnrollment): Promise<CourseEnrollment>;
+  updateCourseEnrollment(id: number, enrollment: Partial<InsertCourseEnrollment>): Promise<CourseEnrollment>;
+  deleteCourseEnrollment(id: number): Promise<void>;
+  enrollUserInCourse(courseId: number, userId: string): Promise<CourseEnrollment>;
+  markModuleComplete(courseId: number, moduleId: number, userId: string): Promise<CourseEnrollment>;
+  getUserCourseProgress(courseId: number, userId: string): Promise<{ enrollment: CourseEnrollment; completedModules: CourseModule[]; totalModules: number; }>;
+  
   getUserProgress(userId: string): Promise<UserProgress[]>;
   updateUserProgress(progress: InsertUserProgress): Promise<UserProgress>;
   getLeaderboard(limit?: number): Promise<Array<{
@@ -701,6 +751,166 @@ export class MongoStorage implements IStorage {
     const db = getDb();
     const courses = db.collection<Course>('courses');
     await courses.deleteOne({ id });
+  }
+
+  // Course Modules
+  async getCourseModules(courseId: number): Promise<CourseModule[]> {
+    const db = getDb();
+    const modules = db.collection<CourseModule>('courseModules');
+    return await modules.find({ courseId }).sort({ order: 1 }).toArray();
+  }
+
+  async getCourseModule(id: number): Promise<CourseModule | undefined> {
+    const db = getDb();
+    const modules = db.collection<CourseModule>('courseModules');
+    const module = await modules.findOne({ id });
+    return module || undefined;
+  }
+
+  async createCourseModule(module: InsertCourseModule): Promise<CourseModule> {
+    const db = getDb();
+    const modules = db.collection<CourseModule>('courseModules');
+    const now = new Date();
+    const id = await this.getNextId('courseModules');
+    
+    const newModule: CourseModule = {
+      ...module,
+      id,
+      createdAt: now,
+      updatedAt: now,
+    };
+    
+    await modules.insertOne(newModule);
+    return newModule;
+  }
+
+  async updateCourseModule(id: number, module: Partial<InsertCourseModule>): Promise<CourseModule> {
+    const db = getDb();
+    const modules = db.collection<CourseModule>('courseModules');
+    
+    const updatedModule = await modules.findOneAndUpdate(
+      { id },
+      { $set: { ...module, updatedAt: new Date() } },
+      { returnDocument: 'after' }
+    );
+    return updatedModule!;
+  }
+
+  async deleteCourseModule(id: number): Promise<void> {
+    const db = getDb();
+    const modules = db.collection<CourseModule>('courseModules');
+    await modules.deleteOne({ id });
+  }
+
+  // Course Enrollments
+  async getCourseEnrollments(courseId?: number, userId?: string): Promise<CourseEnrollment[]> {
+    const db = getDb();
+    const enrollments = db.collection<CourseEnrollment>('courseEnrollments');
+    const query: any = {};
+    if (courseId) query.courseId = courseId;
+    if (userId) query.userId = userId;
+    return await enrollments.find(query).toArray();
+  }
+
+  async getCourseEnrollment(id: number): Promise<CourseEnrollment | undefined> {
+    const db = getDb();
+    const enrollments = db.collection<CourseEnrollment>('courseEnrollments');
+    const enrollment = await enrollments.findOne({ id });
+    return enrollment || undefined;
+  }
+
+  async getUserCourseEnrollment(courseId: number, userId: string): Promise<CourseEnrollment | undefined> {
+    const db = getDb();
+    const enrollments = db.collection<CourseEnrollment>('courseEnrollments');
+    const enrollment = await enrollments.findOne({ courseId, userId });
+    return enrollment || undefined;
+  }
+
+  async createCourseEnrollment(enrollment: InsertCourseEnrollment): Promise<CourseEnrollment> {
+    const db = getDb();
+    const enrollments = db.collection<CourseEnrollment>('courseEnrollments');
+    const now = new Date();
+    const id = await this.getNextId('courseEnrollments');
+    
+    const newEnrollment: CourseEnrollment = {
+      ...enrollment,
+      id,
+      enrolledAt: now,
+      lastAccessedAt: now,
+    };
+    
+    await enrollments.insertOne(newEnrollment);
+    return newEnrollment;
+  }
+
+  async updateCourseEnrollment(id: number, enrollment: Partial<InsertCourseEnrollment>): Promise<CourseEnrollment> {
+    const db = getDb();
+    const enrollments = db.collection<CourseEnrollment>('courseEnrollments');
+    
+    const updatedEnrollment = await enrollments.findOneAndUpdate(
+      { id },
+      { $set: { ...enrollment, lastAccessedAt: new Date() } },
+      { returnDocument: 'after' }
+    );
+    return updatedEnrollment!;
+  }
+
+  async deleteCourseEnrollment(id: number): Promise<void> {
+    const db = getDb();
+    const enrollments = db.collection<CourseEnrollment>('courseEnrollments');
+    await enrollments.deleteOne({ id });
+  }
+
+  async enrollUserInCourse(courseId: number, userId: string): Promise<CourseEnrollment> {
+    const existing = await this.getUserCourseEnrollment(courseId, userId);
+    if (existing) {
+      return existing;
+    }
+
+    return await this.createCourseEnrollment({
+      userId,
+      courseId,
+      completedModules: [],
+      progress: 0,
+    });
+  }
+
+  async markModuleComplete(courseId: number, moduleId: number, userId: string): Promise<CourseEnrollment> {
+    const enrollment = await this.getUserCourseEnrollment(courseId, userId);
+    if (!enrollment) {
+      throw new Error('User not enrolled in course');
+    }
+
+    if (!enrollment.completedModules.includes(moduleId)) {
+      const totalModules = await this.getCourseModules(courseId);
+      const newCompletedModules = [...enrollment.completedModules, moduleId];
+      const progress = Math.round((newCompletedModules.length / totalModules.length) * 100);
+
+      return await this.updateCourseEnrollment(enrollment.id, {
+        completedModules: newCompletedModules,
+        progress,
+      });
+    }
+
+    return enrollment;
+  }
+
+  async getUserCourseProgress(courseId: number, userId: string): Promise<{ enrollment: CourseEnrollment; completedModules: CourseModule[]; totalModules: number; }> {
+    const enrollment = await this.getUserCourseEnrollment(courseId, userId);
+    if (!enrollment) {
+      throw new Error('User not enrolled in course');
+    }
+
+    const allModules = await this.getCourseModules(courseId);
+    const completedModules = allModules.filter(module => 
+      enrollment.completedModules.includes(module.id)
+    );
+
+    return {
+      enrollment,
+      completedModules,
+      totalModules: allModules.length,
+    };
   }
 
   async getUserProgress(userId: string): Promise<UserProgress[]> {
