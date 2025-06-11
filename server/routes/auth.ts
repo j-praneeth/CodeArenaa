@@ -5,6 +5,7 @@ import { User, IUser } from '../models/User';
 import { generateToken } from '../middleware/auth';
 import { body, validationResult } from 'express-validator';
 import { Document, Types } from 'mongoose';
+import jwt from 'jsonwebtoken';
 
 // Passport serialization
 passport.serializeUser((user: any, done) => {
@@ -206,6 +207,50 @@ router.post('/login', async (req: Request, res: Response) => {
   } catch (error) {
     console.error('[DEBUG] Login error:', error);
     res.status(500).json({ message: 'Server error during login' });
+  }
+});
+
+// Get current user endpoint
+router.get('/user', async (req: Request, res: Response) => {
+  try {
+    console.log('[DEBUG] /user endpoint hit');
+    console.log('[DEBUG] Headers:', req.headers);
+    console.log('[DEBUG] Cookies:', req.cookies);
+    
+    let token;
+    if (req.headers.authorization?.startsWith('Bearer')) {
+      token = req.headers.authorization.split(' ')[1];
+    } else if (req.cookies?.token) {
+      token = req.cookies.token;
+    }
+    
+    if (!token) {
+      console.log('[DEBUG] No token found for /user endpoint');
+      return res.status(401).json({ message: 'No token provided' });
+    }
+    
+    console.log('[DEBUG] Token found, verifying...');
+    const decoded = jwt.verify(token, process.env.JWT_SECRET || 'your-secret-key') as any;
+    console.log('[DEBUG] Token decoded:', decoded);
+    
+    const user = await User.findById(decoded.id || decoded.sub).select('-password');
+    console.log('[DEBUG] User lookup result:', user);
+    
+    if (!user) {
+      return res.status(401).json({ message: 'User not found' });
+    }
+    
+    res.json({
+      id: user._id,
+      email: user.email,
+      firstName: user.firstName,
+      lastName: user.lastName,
+      role: user.role,
+      profileImageUrl: user.profileImageUrl
+    });
+  } catch (error) {
+    console.error('[DEBUG] Error in /user endpoint:', error);
+    res.status(401).json({ message: 'Invalid token' });
   }
 });
 

@@ -29,13 +29,19 @@ export const protect = async (req: AuthRequest, res: Response, next: NextFunctio
   try {
     let token;
 
+    console.log('[DEBUG] Auth middleware - checking for token');
+    console.log('[DEBUG] Authorization header:', req.headers.authorization);
+    console.log('[DEBUG] Cookies:', req.cookies);
+
     // Check for token in Authorization header
     if (req.headers.authorization?.startsWith('Bearer')) {
       token = req.headers.authorization.split(' ')[1];
+      console.log('[DEBUG] Token found in Authorization header');
     } 
     // Check for token in cookies
     else if (req.cookies?.token) {
       token = req.cookies.token;
+      console.log('[DEBUG] Token found in cookies');
     }
 
     if (!token) {
@@ -48,11 +54,13 @@ export const protect = async (req: AuthRequest, res: Response, next: NextFunctio
 
     try {
       // Verify token
-      console.log('[DEBUG] Verifying token:', token);
+      console.log('[DEBUG] Verifying token:', token.substring(0, 20) + '...');
+      console.log('[DEBUG] JWT_SECRET exists:', !!JWT_SECRET);
       const decoded = jwt.verify(token, JWT_SECRET) as JwtPayload;
+      console.log('[DEBUG] Token decoded successfully:', decoded);
       
       if (!decoded.id && !decoded.sub) {
-        console.log('[DEBUG] Invalid token format:', decoded);
+        console.log('[DEBUG] Invalid token format - missing id/sub:', decoded);
         return res.status(401).json({ 
           message: 'Invalid token format',
           code: 'INVALID_TOKEN_FORMAT'
@@ -61,21 +69,26 @@ export const protect = async (req: AuthRequest, res: Response, next: NextFunctio
 
       // Get user from database
       const userId = decoded.id || decoded.sub;
-      console.log('[DEBUG] Looking up user:', userId);
+      console.log('[DEBUG] Looking up user with ID:', userId);
+      
       const user = await User.findById(userId)
         .select('-password')
         .lean()
         .exec();
 
       if (!user) {
-        console.log('[DEBUG] User not found:', userId);
+        console.log('[DEBUG] User not found in database for ID:', userId);
         return res.status(401).json({ 
           message: 'User not found or deactivated',
           code: 'USER_NOT_FOUND'
         });
       }
 
-      console.log('[DEBUG] User found:', user);
+      console.log('[DEBUG] User found in database:', {
+        id: user._id,
+        email: user.email,
+        role: user.role
+      });
       
       // Attach user to request
       req.user = {
@@ -88,11 +101,15 @@ export const protect = async (req: AuthRequest, res: Response, next: NextFunctio
         }
       };
 
-      console.log('[DEBUG] Attached user to request:', req.user);
+      console.log('[DEBUG] User attached to request successfully');
 
       next();
     } catch (jwtError) {
       console.error('[DEBUG] JWT Verification Error:', jwtError);
+      console.error('[DEBUG] JWT Error details:', {
+        name: jwtError instanceof Error ? jwtError.name : 'Unknown',
+        message: jwtError instanceof Error ? jwtError.message : String(jwtError)
+      });
       return res.status(401).json({ 
         message: 'Session expired. Please log in again.',
         code: 'INVALID_TOKEN'
