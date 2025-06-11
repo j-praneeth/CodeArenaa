@@ -25,7 +25,7 @@ export function MonacoEditor({
       try {
         // Dynamically import Monaco Editor
         const monaco = await import("monaco-editor");
-        
+
         // Configure Monaco
         monaco.editor.defineTheme("custom-dark", {
           base: "vs-dark",
@@ -78,7 +78,7 @@ export function MonacoEditor({
         textarea.addEventListener("input", (e) => {
           onChange((e.target as HTMLTextAreaElement).value);
         });
-        
+
         if (editorRef.current) {
           editorRef.current.appendChild(textarea);
         }

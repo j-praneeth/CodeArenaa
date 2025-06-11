@@ -186,12 +186,12 @@ export default function Courses() {
 
           {user?.role === 'admin' && (
             <Button 
-              onClick={() => setLocation('/courses')}
+              onClick={() => setLocation('/admin/courses')}
               variant="outline"
               className="w-full mb-4"
             >
               <Users className="h-4 w-4 mr-2" />
-              Manage Courses
+              Admin Panel
             </Button>
           )}
 
@@ -221,7 +221,7 @@ export default function Courses() {
                             className="w-full mt-2"
                             onClick={() => continueCourse(course.id)}
                           >
-                            Continue
+                            {enrollment?.progress === 100 ? 'Review' : 'Continue'}
                           </Button>
                         </CardContent>
                       </Card>
@@ -299,13 +299,46 @@ export default function Courses() {
                         </div>
                       </div>
                     </div>
-                    <Button 
-                      className="w-full" 
-                      onClick={() => startCourse(course.id)}
-                      disabled={enrollMutation.isPending}
-                    >
-                      {enrollMutation.isPending ? 'Enrolling...' : 'Start Course'}
-                    </Button>
+                    <div className="space-y-2">
+                      <Button 
+                        className="w-full" 
+                        onClick={() => startCourse(course.id)}
+                        disabled={enrollMutation.isPending}
+                      >
+                        {enrollMutation.isPending ? 'Enrolling...' : 'Start Course'}
+                      </Button>
+                      {user?.role === 'admin' && (
+                        <div className="flex gap-2">
+                          <Button 
+                            variant="outline"
+                            size="sm"
+                            className="flex-1"
+                            onClick={() => setLocation(`/admin/courses/${course.id}/edit`)}
+                          >
+                            Edit
+                          </Button>
+                          <Button 
+                            variant="destructive"
+                            size="sm"
+                            className="flex-1"
+                            onClick={() => {
+                              if (confirm(`Delete "${course.title}"? This action cannot be undone.`)) {
+                                fetch(`/api/courses/${course.id}`, { method: 'DELETE' })
+                                  .then(() => {
+                                    queryClient.invalidateQueries({ queryKey: ['courses'] });
+                                    toast({ title: 'Course deleted successfully' });
+                                  })
+                                  .catch(() => {
+                                    toast({ title: 'Failed to delete course', variant: 'destructive' });
+                                  });
+                              }
+                            }}
+                          >
+                            Delete
+                          </Button>
+                        </div>
+                      )}
+                    </div>
                   </CardContent>
                 </Card>
               ))}

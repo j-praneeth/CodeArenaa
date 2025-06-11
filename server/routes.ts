@@ -121,7 +121,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         ...req.body,
         createdBy: userId,
       });
-      
+
       const problem = await storage.createProblem(validatedData);
       res.status(201).json(problem);
     } catch (error) {
@@ -138,7 +138,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const problemId = parseInt(req.params.id);
       const userId = req.user.id;
-      
+
       if (!userId) {
         console.error('[DEBUG] No user ID found in request:', req.user);
         return res.status(401).json({ message: "User ID not found" });
@@ -158,7 +158,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       });
 
       console.log('[DEBUG] Updating problem:', { problemId, data: validatedData });
-      
+
       // Update the problem
       const updatedProblem = await storage.updateProblem(problemId, validatedData);
       if (!updatedProblem) {
@@ -180,7 +180,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.delete('/api/problems/:id', protect, requireAdmin, async (req: AuthRequest, res) => {
     try {
       const problemId = parseInt(req.params.id);
-      
+
       // First check if the problem exists
       const existingProblem = await storage.getProblem(problemId);
       if (!existingProblem) {
@@ -188,7 +188,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       console.log('[DEBUG] Deleting problem:', problemId);
-      
+
       // Delete the problem
       await storage.deleteProblem(problemId);
       res.status(204).send();
@@ -208,7 +208,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       const problemId = req.query.problemId ? parseInt(req.query.problemId as string) : undefined;
-      
+
       const submissions = await storage.getSubmissions(userId, problemId);
       res.json(submissions);
     } catch (error) {
@@ -226,7 +226,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       const { isTest, ...submissionData } = req.body;
-      
+
       const validatedData = insertSubmissionSchema.parse({
         ...submissionData,
         userId,
@@ -236,7 +236,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       // Mock code execution - replace with actual judge system
       const mockResult = mockExecuteCode(validatedData.code, validatedData.language);
-      
+
       if (isTest) {
         // For test runs, return results immediately without saving to database
         return res.json({ 
@@ -259,7 +259,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       validatedData.memory = mockResult.memory;
       validatedData.score = mockResult.score;
       validatedData.feedback = mockResult.error || 'Solution accepted';
-      
+
       const submission = await storage.createSubmission(validatedData);
       res.status(201).json(submission);
     } catch (error) {
@@ -317,7 +317,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const userId = req.user.id;
       const user = await storage.getUser(userId);
-      
+
       if (user?.role !== 'admin') {
         return res.status(403).json({ message: "Only admins can create contests" });
       }
@@ -326,7 +326,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         ...req.body,
         createdBy: userId,
       });
-      
+
       const contest = await storage.createContest(validatedData);
       res.status(201).json(contest);
     } catch (error) {
@@ -358,7 +358,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         ...req.body,
         createdBy: userId,
       });
-      
+
       const course = await storage.createCourse(validatedData);
       res.status(201).json(course);
     } catch (error) {
@@ -375,16 +375,35 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const id = parseInt(req.params.id);
       const course = await storage.getCourse(id);
       if (!course) {
-        return res.status(404).json({ message: "Course not found" });
+        return res.status(404).json({ message: 'Course not found' });
       }
       res.json(course);
     } catch (error) {
-      console.error("Error fetching course:", error);
-      res.status(500).json({ message: "Failed to fetch course" });
+      console.error('Error fetching course:', error);
+      res.status(500).json({ message: 'Failed to fetch course' });
     }
   });
 
-  
+  app.put('/api/courses/:id', protect, requireAdmin, async (req: AuthRequest, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      const updateData = {
+        title: req.body.title,
+        description: req.body.description,
+        isPublic: req.body.isPublic,
+      };
+
+      const course = await storage.updateCourse(id, updateData);
+      if (!course) {
+        return res.status(404).json({ message: 'Course not found' });
+      }
+      res.json(course);
+    } catch (error) {
+      console.error('Error updating course:', error);
+      res.status(500).json({ message: 'Failed to update course' });
+    }
+  });
+
 
   // Course Module routes
   app.get('/api/courses/:id/modules', async (req, res) => {
@@ -419,7 +438,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         ...req.body,
         courseId,
       });
-      
+
       const module = await storage.createCourseModule(validatedData);
       res.status(201).json(module);
     } catch (error) {
@@ -435,7 +454,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const id = parseInt(req.params.id);
       const validatedData = insertCourseModuleSchema.partial().parse(req.body);
-      
+
       const module = await storage.updateCourseModule(id, validatedData);
       res.json(module);
     } catch (error) {
@@ -515,7 +534,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       const courseId = parseInt(req.params.courseId);
       const moduleId = parseInt(req.params.moduleId);
-      
+
       const enrollment = await storage.markModuleComplete(courseId, moduleId, userId);
       res.json(enrollment);
     } catch (error) {
@@ -528,14 +547,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post('/api/modules/execute', protect, async (req: AuthRequest, res) => {
     try {
       const { code, language } = req.body;
-      
+
       if (!code || !language) {
         return res.status(400).json({ message: "Code and language are required" });
       }
 
       // Mock code execution - replace with actual judge system
       const mockResult = mockExecuteCode(code, language);
-      
+
       res.json({
         success: mockResult.status === 'accepted',
         output: mockResult.actualOutput,
@@ -577,7 +596,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       console.log('[DEBUG] Fetching assignment:', req.params.id);
       const id = parseInt(req.params.id);
       const assignment = await storage.getAssignment(id);
-      
+
       if (!assignment) {
         console.log('[DEBUG] Assignment not found:', id);
         return res.status(404).json({ message: "Assignment not found" });
@@ -648,10 +667,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       console.log('[DEBUG] Validating assignment data:', data);
       const validatedData = insertAssignmentSchema.parse(data);
-      
+
       console.log('[DEBUG] Creating assignment in storage');
       const assignment = await storage.createAssignment(validatedData);
-      
+
       console.log('[DEBUG] Assignment created successfully:', assignment);
       res.status(201).json(assignment);
     } catch (error) {
@@ -709,7 +728,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const assignmentId = parseInt(req.params.id);
       const userId = req.user.id;
       const user = await storage.getUser(userId);
-      
+
       if (user?.role === 'admin') {
         // Admin can see all submissions for this assignment
         const submissions = await storage.getAssignmentSubmissions(assignmentId);
@@ -729,17 +748,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const assignmentId = parseInt(req.params.id);
       const userId = req.user.id;
-      
+
       console.log('[DEBUG] Fetching submission:', { assignmentId, userId });
-      
+
       if (!userId) {
         console.error('[DEBUG] No user ID found in request:', req.user);
         return res.status(401).json({ message: "User ID not found" });
       }
-      
+
       const submission = await storage.getUserAssignmentSubmission(assignmentId, userId);
       console.log('[DEBUG] Submission found:', !!submission);
-      
+
       res.json(submission);
     } catch (error) {
       console.error("Error fetching user assignment submission:", error);
@@ -751,7 +770,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const assignmentId = parseInt(req.params.id);
       const userId = req.user.id;
-      
+
       if (!userId) {
         console.error('[DEBUG] No user ID found in request:', req.user);
         return res.status(401).json({ message: "User ID not found" });
@@ -768,7 +787,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       // Check if user already has a submission
       let submission = await storage.getUserAssignmentSubmission(assignmentId, userId);
-      
+
       if (submission) {
         // Update existing submission
         submission = await storage.updateAssignmentSubmission(submission.id, {
@@ -787,7 +806,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           status: req.body.status || 'in_progress'
         });
       }
-      
+
       res.json(submission);
     } catch (error) {
       console.error("Error creating/updating assignment submission:", error);
@@ -799,7 +818,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const assignmentId = parseInt(req.params.id);
       const userId = req.user.id;
-      
+
       if (!userId) {
         console.error('[DEBUG] No user ID found in request:', req.user);
         return res.status(401).json({ message: "User ID not found" });
@@ -822,7 +841,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ message: "Assignment already submitted" });
       }
 
-      // Submit the assignment
+      The code includes a PUT endpoint for updating courses, secured with authentication and admin authorization, allowing modification of course title, description, and public status.      // Submit the assignment
       const submittedAssignment = await storage.submitAssignment(assignmentId, userId);
       res.json(submittedAssignment);
     } catch (error) {
@@ -835,7 +854,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post('/api/execute', protect, async (req: AuthRequest, res) => {
     try {
       const { code, language, input } = req.body;
-      
+
       // Mock code execution for now
       const result = mockExecuteCode(code, language);
       res.json(result);
@@ -865,7 +884,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         ...req.body,
         createdBy: userId,
       });
-      
+
       const group = await storage.createGroup(validatedData);
       res.status(201).json(group);
     } catch (error) {
@@ -893,7 +912,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const userId = req.user.id;
       const user = await storage.getUser(userId);
-      
+
       if (user?.role !== 'admin') {
         return res.status(403).json({ message: "Only admins can create announcements" });
       }
@@ -902,7 +921,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         ...req.body,
         createdBy: userId,
       });
-      
+
       const announcement = await storage.createAnnouncement(validatedData);
       res.status(201).json(announcement);
     } catch (error) {
@@ -953,14 +972,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Admin routes
   app.patch('/api/admin/users/:id/role', protect, requireAdmin, async (req: AuthRequest, res) => {
     try {
-      
+
       const targetUserId = req.params.id;
       const { role } = req.body;
-      
+
       if (!['student', 'admin'].includes(role)) {
         return res.status(400).json({ message: "Invalid role" });
       }
-      
+
       const updatedUser = await storage.updateUserRole(targetUserId, role);
       res.json(updatedUser);
     } catch (error) {
@@ -985,7 +1004,7 @@ function mockExecuteCode(code: string, language: string) {
 
   // Simulate code execution for each test case
   const testCase = testCases[0]; // Using first test case for now
-  
+
   // Simulate different execution scenarios
   const scenarios = [
     {
@@ -1028,7 +1047,7 @@ function mockExecuteCode(code: string, language: string) {
 
   // Randomly select a scenario (for testing purposes)
   const result = scenarios[Math.floor(Math.random() * scenarios.length)];
-  
+
   return {
     status: result.status,
     runtime: result.runtime,

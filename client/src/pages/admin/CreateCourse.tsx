@@ -73,7 +73,7 @@ export default function CreateCourse() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(data.course),
       });
-      
+
       if (!courseResponse.ok) throw new Error('Failed to create course');
       const course = await courseResponse.json();
 
@@ -90,9 +90,8 @@ export default function CreateCourse() {
       return course;
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['courses'] });
       toast({ title: 'Course created successfully!' });
-      setLocation('/admin/courses');
+      setLocation('/courses');
     },
     onError: () => {
       toast({
@@ -394,14 +393,14 @@ export default function CreateCourse() {
                               </Badge>
                             )}
                           </div>
-                          
+
                           {module.textContent && (
                             <div className="text-sm text-muted-foreground">
                               <strong>Text:</strong> {module.textContent.substring(0, 100)}
                               {module.textContent.length > 100 && '...'}
                             </div>
                           )}
-                          
+
                           {module.codeExample && (
                             <div className="text-sm font-mono bg-muted p-2 rounded">
                               {module.codeExample.substring(0, 150)}
