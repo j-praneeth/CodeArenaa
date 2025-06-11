@@ -80,9 +80,29 @@ export const insertCourseSchema = z.object({
   title: z.string(),
   description: z.string().optional(),
   problems: z.array(z.number()).optional(),
+  modules: z.array(z.number()).optional(),
   enrolledUsers: z.array(z.string()).optional(),
   isPublic: z.boolean().default(true),
   createdBy: z.string().optional(),
+});
+
+export const insertCourseModuleSchema = z.object({
+  courseId: z.number(),
+  title: z.string().min(1, "Module title is required"),
+  description: z.string().optional(),
+  order: z.number().min(0, "Order must be non-negative"),
+  textContent: z.string().optional(),
+  videoUrl: z.string().url().optional(),
+  codeExample: z.string().optional(),
+  language: z.string().optional(),
+  expectedOutput: z.string().optional(),
+});
+
+export const insertCourseEnrollmentSchema = z.object({
+  userId: z.string(),
+  courseId: z.number(),
+  completedModules: z.array(z.number()).default([]),
+  progress: z.number().min(0).max(100).default(0),
 });
 
 export const insertUserProgressSchema = z.object({
