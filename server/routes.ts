@@ -1,7 +1,7 @@
 import type { Express } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
-import { isAuthenticated } from "./replitAuth";
+import { protect, requireAdmin as requireAdminMiddleware, AuthRequest } from "./middleware/auth";
 import { 
   insertProblemSchema, 
   insertSubmissionSchema, 
@@ -15,29 +15,16 @@ import {
 } from "@shared/schema";
 import { z } from "zod";
 
-// Admin middleware for Replit auth
-const requireAdmin = async (req: any, res: any, next: any) => {
-  if (!req.isAuthenticated()) {
-    return res.status(401).json({ message: "Unauthorized" });
-  }
-  
-  const userId = req.user.user.id;
-  const user = await storage.getUser(userId);
-  
-  if (!user || user.role !== 'admin') {
-    return res.status(403).json({ message: "Admin access required" });
-  }
-  
-  next();
-};
+// Admin middleware for MongoDB auth
+const requireAdmin = requireAdminMiddleware;
 
 export async function registerRoutes(app: Express): Promise<Server> {
   const server = createServer(app);
 
   // Auth routes
-  app.get('/api/auth/user', isAuthenticated, async (req: any, res) => {
+  app.get('/api/auth/user', protect, async (req: AuthRequest, res) => {
     try {
-      const userId = req.user.user.id;
+      const userId = req.user.id;
       const user = await storage.getUser(userId);
       res.json(user);
     } catch (error) {
@@ -47,7 +34,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Admin routes
-  app.get('/api/admin/analytics', isAuthenticated, requireAdmin, async (req: any, res) => {
+  app.get('/api/admin/analytics', protect, requireAdmin, async (req: AuthRequest, res) => {
     try {
       const analytics = await storage.getAdminAnalytics();
       res.json(analytics);
@@ -57,7 +44,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.get('/api/admin/users', isAuthenticated, requireAdmin, async (req: any, res) => {
+  app.get('/api/admin/users', protect, requireAdmin, async (req: AuthRequest, res) => {
     try {
       const users = await storage.getAllUsers();
       res.json(users);
@@ -67,7 +54,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.get('/api/admin/assignments', isAuthenticated, requireAdmin, async (req: any, res) => {
+  app.get('/api/admin/assignments', protect, requireAdmin, async (req: AuthRequest, res) => {
     try {
       const assignments = await storage.getAssignments();
       res.json(assignments);
@@ -77,7 +64,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.get('/api/admin/groups', isAuthenticated, requireAdmin, async (req: any, res) => {
+  app.get('/api/admin/groups', protect, requireAdmin, async (req: AuthRequest, res) => {
     try {
       const groups = await storage.getGroups();
       res.json(groups);
@@ -87,7 +74,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.get('/api/admin/announcements', isAuthenticated, requireAdmin, async (req: any, res) => {
+  app.get('/api/admin/announcements', protect, requireAdmin, async (req: AuthRequest, res) => {
     try {
       const announcements = await storage.getAnnouncements();
       res.json(announcements);
@@ -98,7 +85,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Problem routes
-  app.get('/api/problems', isAuthenticated, async (req, res) => {
+  app.get('/api/problems', protect, async (req: AuthRequest, res) => {
     try {
       const problems = await storage.getProblems();
       res.json(problems);
@@ -108,7 +95,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.get('/api/problems/:id', isAuthenticated, async (req, res) => {
+  app.get('/api/problems/:id', protect, async (req: AuthRequest, res) => {
     try {
       const id = parseInt(req.params.id);
       const problem = await storage.getProblem(id);
@@ -122,9 +109,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post('/api/problems', isAuthenticated, requireAdmin, async (req: any, res) => {
+  app.post('/api/problems', protect, requireAdmin, async (req: AuthRequest, res) => {
     try {
-      const userId = req.user.sub || req.user.claims?.sub || req.user.id;
+      const userId = req.user.id;
       if (!userId) {
         console.error('[DEBUG] No user ID found in request:', req.user);
         return res.status(401).json({ message: "User ID not found" });
@@ -147,10 +134,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Add PUT endpoint for updating problems
-  app.put('/api/problems/:id', isAuthenticated, requireAdmin, async (req: any, res) => {
+  app.put('/api/problems/:id', protect, requireAdmin, async (req: AuthRequest, res) => {
     try {
       const problemId = parseInt(req.params.id);
-      const userId = req.user.sub || req.user.claims?.sub || req.user.id;
+      const userId = req.user.id;
       
       if (!userId) {
         console.error('[DEBUG] No user ID found in request:', req.user);
@@ -363,9 +350,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post('/api/courses', isAuthenticated, requireAdmin, async (req: any, res) => {
+  app.post('/api/courses', protect, requireAdmin, async (req: AuthRequest, res) => {
     try {
-      const userId = req.user.user.id;
+      const userId = req.user.id;
 
       const validatedData = insertCourseSchema.parse({
         ...req.body,
