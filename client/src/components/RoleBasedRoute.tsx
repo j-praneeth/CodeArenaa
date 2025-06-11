@@ -7,8 +7,15 @@ interface RoleBasedRouteProps {
   adminComponent: React.ComponentType;
 }
 
+interface User {
+  role: string;
+  id: number;
+  name: string;
+  email: string;
+}
+
 export function RoleBasedRoute({ component: Component, adminComponent: AdminComponent }: RoleBasedRouteProps) {
-  const { data: user, isLoading } = useQuery({
+  const { data: user, isLoading } = useQuery<User>({
     queryKey: ["/api/auth/me"],
     retry: false,
   });
