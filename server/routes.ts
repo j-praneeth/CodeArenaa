@@ -1,7 +1,7 @@
 import type { Express } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
-import { protect as isAuthenticated, requireAdmin } from "./middleware/auth";
+import { isAuthenticated } from "./replitAuth";
 import { 
   insertProblemSchema, 
   insertSubmissionSchema, 
@@ -15,13 +15,31 @@ import {
 } from "@shared/schema";
 import { z } from "zod";
 
+// Admin middleware for Replit auth
+const requireAdmin = async (req: any, res: any, next: any) => {
+  if (!req.isAuthenticated()) {
+    return res.status(401).json({ message: "Unauthorized" });
+  }
+  
+  const userId = req.user.user.id;
+  const user = await storage.getUser(userId);
+  
+  if (!user || user.role !== 'admin') {
+    return res.status(403).json({ message: "Admin access required" });
+  }
+  
+  next();
+};
+
 export async function registerRoutes(app: Express): Promise<Server> {
   const server = createServer(app);
 
   // Auth routes
   app.get('/api/auth/user', isAuthenticated, async (req: any, res) => {
     try {
-      res.json(req.user);
+      const userId = req.user.user.id;
+      const user = await storage.getUser(userId);
+      res.json(user);
     } catch (error) {
       console.error("Error fetching user:", error);
       res.status(500).json({ message: "Failed to fetch user" });
@@ -269,7 +287,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // User stats route
   app.get('/api/users/me/stats', isAuthenticated, async (req: any, res) => {
     try {
-      const userId = req.user.sub || req.user.claims?.sub || req.user.id;
+      const userId = req.user.user.id;
       if (!userId) {
         console.error('[DEBUG] No user ID found in request:', req.user);
         return res.status(401).json({ message: "User ID not found" });
@@ -334,8 +352,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Course routes
-  app.get('/api/courses', async (req, res) => {
+  app.get('/api/courses', async (req: any, res) => {
     try {
+      // Always fetch all public courses from the database
       const courses = await storage.getCourses();
       res.json(courses);
     } catch (error) {
@@ -358,14 +377,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post('/api/courses', isAuthenticated, async (req: any, res) => {
+  app.post('/api/courses', isAuthenticated, requireAdmin, async (req: any, res) => {
     try {
-      const userId = req.user.claims.sub;
-      const user = await storage.getUser(userId);
-      
-      if (user?.role !== 'admin') {
-        return res.status(403).json({ message: "Only admins can create courses" });
-      }
+      const userId = req.user.user.id;
 
       const validatedData = insertCourseSchema.parse({
         ...req.body,
@@ -458,7 +472,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Course Enrollment routes
   app.post('/api/courses/:id/enroll', isAuthenticated, async (req: any, res) => {
     try {
-      const userId = req.user.sub || req.user.claims?.sub || req.user.id;
+      const userId = req.user.user.id;
       if (!userId) {
         return res.status(401).json({ message: "User ID not found" });
       }
@@ -474,7 +488,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.get('/api/users/me/enrollments', isAuthenticated, async (req: any, res) => {
     try {
-      const userId = req.user.sub || req.user.claims?.sub || req.user.id;
+      const userId = req.user.user.id;
       if (!userId) {
         return res.status(401).json({ message: "User ID not found" });
       }
@@ -487,14 +501,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.get('/api/courses/:courseId/progress', isAuthenticated, async (req: any, res) => {
+  app.get('/api/courses/:id/progress', isAuthenticated, async (req: any, res) => {
     try {
-      const userId = req.user.sub || req.user.claims?.sub || req.user.id;
+      const userId = req.user.user.id;
       if (!userId) {
         return res.status(401).json({ message: "User ID not found" });
       }
 
-      const courseId = parseInt(req.params.courseId);
+      const courseId = parseInt(req.params.id);
       const progress = await storage.getUserCourseProgress(courseId, userId);
       res.json(progress);
     } catch (error) {
@@ -505,7 +519,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.post('/api/courses/:courseId/modules/:moduleId/complete', isAuthenticated, async (req: any, res) => {
     try {
-      const userId = req.user.sub || req.user.claims?.sub || req.user.id;
+      const userId = req.user.user.id;
       if (!userId) {
         return res.status(401).json({ message: "User ID not found" });
       }
@@ -845,7 +859,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Group routes
   app.get('/api/groups', isAuthenticated, async (req: any, res) => {
     try {
-      const userId = req.user.claims.sub;
+      const userId = req.user.user.id;
       const groups = await storage.getUserGroups(userId);
       res.json(groups);
     } catch (error) {
@@ -854,14 +868,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post('/api/groups', isAuthenticated, async (req: any, res) => {
+  app.post('/api/groups', isAuthenticated, requireAdmin, async (req: any, res) => {
     try {
-      const userId = req.user.claims.sub;
-      const user = await storage.getUser(userId);
-      
-      if (user?.role !== 'admin') {
-        return res.status(403).json({ message: "Only admins can create groups" });
-      }
+      const userId = req.user.user.id;
 
       const validatedData = insertGroupSchema.parse({
         ...req.body,
@@ -953,14 +962,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Admin routes
-  app.patch('/api/admin/users/:id/role', isAuthenticated, async (req: any, res) => {
+  app.patch('/api/admin/users/:id/role', isAuthenticated, requireAdmin, async (req: any, res) => {
     try {
-      const currentUserId = req.user.claims.sub;
-      const currentUser = await storage.getUser(currentUserId);
-      
-      if (currentUser?.role !== 'admin') {
-        return res.status(403).json({ message: "Admin access required" });
-      }
       
       const targetUserId = req.params.id;
       const { role } = req.body;
