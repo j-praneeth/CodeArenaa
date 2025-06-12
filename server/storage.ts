@@ -1404,7 +1404,7 @@ export function mockExecuteCode(code: string, language: string) {
           const result = eval(code);
           output = result !== undefined ? String(result) : '';
         } catch (e) {
-          error = `JavaScript Error: ${e.message}`;
+          error = `JavaScript Error: ${e instanceof Error ? e.message : String(e)}`;
         }
         break;
 
@@ -1469,7 +1469,7 @@ export function mockExecuteCode(code: string, language: string) {
     return {
       status: 'error',
       actualOutput: '',
-      error: `Execution error: ${e.message}`,
+      error: `Execution error: ${e instanceof Error ? e.message : String(e)}`,
       runtime: 0,
       memory: 0
     };

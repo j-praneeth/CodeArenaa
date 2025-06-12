@@ -98,11 +98,10 @@ export function ProblemModal({ problem, isOpen, onClose }: ProblemModalProps) {
       }
 
       try {
-        const response = await apiRequest("POST", "/api/submissions", {
+        const response = await apiRequest("/api/run-code", "POST", {
           problemId: problem.id,
           code: code.trim(),
-          language,
-          isTest: true  // This indicates it's a test run, not a final submission
+          language
         });
         
         const data = await response.json();

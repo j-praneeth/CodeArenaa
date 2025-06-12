@@ -1,6 +1,6 @@
 import type { Express } from "express";
 import { createServer, type Server } from "http";
-import { storage } from "./storage";
+import { storage, mockExecuteCode } from "./storage";
 import { protect, requireAdmin as requireAdminMiddleware, AuthRequest } from "./middleware/auth";
 import { 
   insertProblemSchema, 
@@ -218,6 +218,59 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Code execution route for problems - run code without saving
+  app.post('/api/run-code', protect, async (req: AuthRequest, res) => {
+    try {
+      const { code, language, problemId } = req.body;
+
+      if (!code || !language || !problemId) {
+        return res.status(400).json({ message: "Code, language, and problemId are required" });
+      }
+
+      // Get the problem from database to fetch test cases
+      const problem = await storage.getProblem(problemId);
+      if (!problem) {
+        return res.status(404).json({ message: "Problem not found" });
+      }
+
+      // Get test cases from the problem (use visible test cases for "Run Code")
+      const testCases = problem.testCases || [];
+      const visibleTestCases = testCases.filter((tc: any) => !tc.isHidden);
+      
+      if (visibleTestCases.length === 0) {
+        return res.status(400).json({ message: "No test cases available for this problem" });
+      }
+
+      // Run code against all visible test cases
+      const results = [];
+      
+      for (const testCase of visibleTestCases) {
+        // Mock code execution for this test case
+        const mockResult = mockExecuteCode(code, language);
+        
+        // For demo purposes, we'll simulate different outcomes
+        // In a real system, you'd actually execute the code against the test case input
+        const passed = Math.random() > 0.5; // Random pass/fail for demo
+        
+        results.push({
+          passed: passed,
+          input: testCase.input,
+          output: mockResult.actualOutput,
+          expectedOutput: testCase.expectedOutput,
+          isHidden: testCase.isHidden || false,
+          error: passed ? null : mockResult.error,
+          runtime: mockResult.runtime,
+          memory: mockResult.memory
+        });
+      }
+
+      res.json({ results });
+    } catch (error) {
+      console.error("Error running code:", error);
+      res.status(500).json({ message: "Failed to run code" });
+    }
+  });
+
   app.post('/api/submissions', protect, async (req: AuthRequest, res) => {
     try {
       const userId = req.user.id;
@@ -226,40 +279,56 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(401).json({ message: "User ID not found" });
       }
 
-      const { isTest, ...submissionData } = req.body;
-
       const validatedData = insertSubmissionSchema.parse({
-        ...submissionData,
+        ...req.body,
         userId,
         status: 'pending',
         submittedAt: new Date(),
       });
 
-      // Mock code execution - replace with actual judge system
-      const mockResult = mockExecuteCode(validatedData.code, validatedData.language);
-
-      if (isTest) {
-        // For test runs, return results immediately without saving to database
-        return res.json({ 
-          results: [{
-            passed: mockResult.status === 'accepted',
-            input: mockResult.input,
-            output: mockResult.actualOutput,
-            expectedOutput: mockResult.expectedOutput,
-            isHidden: false,
-            error: mockResult.error,
-            runtime: mockResult.runtime,
-            memory: mockResult.memory
-          }]
-        });
+      // Get the problem from database to fetch test cases
+      const problem = await storage.getProblem(validatedData.problemId);
+      if (!problem) {
+        return res.status(404).json({ message: "Problem not found" });
       }
 
+      // Get all test cases from the problem (including hidden ones for final submission)
+      const testCases = problem.testCases || [];
+      
+      if (testCases.length === 0) {
+        return res.status(400).json({ message: "No test cases available for this problem" });
+      }
+
+      // Run code against all test cases to determine final status
+      let passedCount = 0;
+      let totalTestCases = testCases.length;
+      let maxRuntime = 0;
+      let maxMemory = 0;
+
+      for (const testCase of testCases) {
+        // Mock code execution for this test case
+        const mockResult = mockExecuteCode(validatedData.code, validatedData.language);
+        
+        // For demo purposes, simulate test case results
+        const passed = Math.random() > 0.3; // 70% chance of passing each test case
+        if (passed) passedCount++;
+        
+        maxRuntime = Math.max(maxRuntime, mockResult.runtime);
+        maxMemory = Math.max(maxMemory, mockResult.memory);
+      }
+
+      // Determine overall status based on test case results
+      const allPassed = passedCount === totalTestCases;
+      const score = ((passedCount / totalTestCases) * 100).toFixed(2);
+
       // For actual submissions, save to database
-      validatedData.status = mockResult.status;
-      validatedData.runtime = mockResult.runtime;
-      validatedData.memory = mockResult.memory;
-      validatedData.score = mockResult.score;
-      validatedData.feedback = mockResult.error || 'Solution accepted';
+      validatedData.status = allPassed ? 'accepted' : passedCount > 0 ? 'partial' : 'wrong_answer';
+      validatedData.runtime = maxRuntime;
+      validatedData.memory = maxMemory;
+      validatedData.score = score;
+      validatedData.feedback = allPassed 
+        ? 'All test cases passed!' 
+        : `${passedCount}/${totalTestCases} test cases passed`;
 
       const submission = await storage.createSubmission(validatedData);
       res.status(201).json(submission);
@@ -1095,71 +1164,3 @@ export async function registerRoutes(app: Express): Promise<Server> {
   return server;
 }
 
-// Mock code execution function - replace with actual judge system
-function mockExecuteCode(code: string, language: string) {
-  // Mock test cases
-  const testCases = [
-    {
-      input: "nums = [2, 7, 11, 15], target = 9",
-      expectedOutput: "[0, 1]",
-      actualOutput: "[1, 0]" // simulated user's output
-    }
-  ];
-
-  // Simulate code execution for each test case
-  const testCase = testCases[0]; // Using first test case for now
-
-  // Simulate different execution scenarios
-  const scenarios = [
-    {
-      status: 'wrong_answer',
-      runtime: 100,
-      memory: 16,
-      score: "0.00",
-      actualOutput: testCase.actualOutput,
-      expectedOutput: testCase.expectedOutput,
-      error: null
-    },
-    {
-      status: 'time_limit_exceeded',
-      runtime: 2000,
-      memory: 16,
-      score: "0.00",
-      actualOutput: "Function took too long to execute",
-      expectedOutput: testCase.expectedOutput,
-      error: "Time limit exceeded: Function took longer than 1000ms to execute"
-    },
-    {
-      status: 'runtime_error',
-      runtime: 50,
-      memory: 16,
-      score: "0.00",
-      actualOutput: null,
-      expectedOutput: testCase.expectedOutput,
-      error: "TypeError: Cannot read property 'length' of undefined"
-    },
-    {
-      status: 'accepted',
-      runtime: 95,
-      memory: 16,
-      score: "100.00",
-      actualOutput: testCase.expectedOutput,
-      expectedOutput: testCase.expectedOutput,
-      error: null
-    }
-  ];
-
-  // Randomly select a scenario (for testing purposes)
-  const result = scenarios[Math.floor(Math.random() * scenarios.length)];
-
-  return {
-    status: result.status,
-    runtime: result.runtime,
-    memory: result.memory,
-    score: result.score,
-    actualOutput: result.actualOutput,
-    expectedOutput: result.expectedOutput,
-    error: result.error,
-    input: testCase.input
-  };
-}
