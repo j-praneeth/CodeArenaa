@@ -16,9 +16,9 @@ export function Layout({ children }: LayoutProps) {
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
       <Navigation />
-      <div className="flex">
+      <div className="relative">
         <Sidebar />
-        <main className="flex-1 overflow-auto">
+        <main className="pt-4 overflow-auto transition-all duration-300 ease-in-out">
           {children}
         </main>
       </div>
