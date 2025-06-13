@@ -38,6 +38,7 @@ import EditCourse from "@/pages/admin/EditCourse";
 import CreateModule from "@/pages/admin/CreateModule";
 import ModuleDetail from "@/pages/admin/ModuleDetail";
 import EditModule from "@/pages/admin/EditModule";
+import { CourseWizard } from "@/components/courses/CourseWizard";
 
 function AppContent() {
   const { user, isLoading, isAuthenticated } = useAuth();
@@ -138,6 +139,11 @@ function AppContent() {
             <Route path="/admin/courses/create">
               <AdminRoute>
                 <CreateCourse />
+              </AdminRoute>
+            </Route>
+            <Route path="/admin/courses/wizard">
+              <AdminRoute>
+                <CourseWizard />
               </AdminRoute>
             </Route>
             <Route path="/admin/courses/:courseId">
