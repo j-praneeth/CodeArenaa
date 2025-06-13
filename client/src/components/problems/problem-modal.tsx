@@ -104,10 +104,12 @@ export function ProblemModal({ problem, isOpen, onClose }: ProblemModalProps) {
           language
         });
         
-        const data = await response.json();
-        if (!data.results || !Array.isArray(data.results)) {
-          throw new Error("Invalid response format from server");
+        if (!response.ok) {
+          const errorText = await response.text();
+          throw new Error(errorText || "Failed to run code");
         }
+        
+        const data = await response.json();
         return data;
       } catch (error) {
         if (error instanceof Error) {
@@ -117,21 +119,25 @@ export function ProblemModal({ problem, isOpen, onClose }: ProblemModalProps) {
       }
     },
     onSuccess: (data) => {
-      if (!data.results) {
-        setTestResults([]);
-        return;
-      }
+      // Create a test result based on the single execution result
+      const testResult: TestResult = {
+        passed: data.status === "success",
+        output: data.output || "",
+        expectedOutput: "Expected output", // This should come from test cases
+        isHidden: false,
+        input: "Sample input", // This should come from test cases
+        runtime: data.runtime || 0,
+        memory: data.memory || 0,
+        error: data.error
+      };
 
-      setTestResults(data.results);
+      setTestResults([testResult]);
       setActiveTab("results");
-      
-      const passedCount = data.results.filter((r: { passed: boolean }) => r.passed).length;
-      const totalCount = data.results.length;
       
       toast({
         title: "Code Executed",
-        description: `${passedCount}/${totalCount} test cases passed`,
-        variant: passedCount === totalCount ? "default" : "destructive",
+        description: testResult.passed ? "Code ran successfully" : "Code execution failed",
+        variant: testResult.passed ? "default" : "destructive",
       });
     },
     onError: (error: Error) => {

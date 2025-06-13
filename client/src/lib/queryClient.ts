@@ -12,11 +12,15 @@ export async function apiRequest(
   url: string,
   data?: any
 ): Promise<Response> {
+  const token = localStorage.getItem('token');
+  
   const config: RequestInit = {
     method: method.toUpperCase(),
     headers: {
       "Content-Type": "application/json",
+      ...(token ? { "Authorization": `Bearer ${token}` } : {})
     },
+    credentials: "include"
   };
 
   if (data && method.toUpperCase() !== "GET") {
