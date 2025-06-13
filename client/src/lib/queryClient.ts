@@ -8,47 +8,26 @@ async function throwIfResNotOk(res: Response) {
 }
 
 export async function apiRequest(
-  url: string,
   method: string,
-  data?: unknown | undefined,
+  url: string,
+  data?: any
 ): Promise<Response> {
+  const config: RequestInit = {
+    method: method.toUpperCase(),
+    headers: {
+      "Content-Type": "application/json",
+    },
+  };
+
+  if (data && method.toUpperCase() !== "GET") {
+    config.body = JSON.stringify(data);
+  }
+
   try {
-    console.log(`[DEBUG] Making ${method} request to ${url}`, data);
-    const token = localStorage.getItem('token');
-    const res = await fetch(url, {
-      method,
-      headers: {
-        ...(data ? { "Content-Type": "application/json" } : {}),
-        "Accept": "application/json",
-        ...(token ? { "Authorization": `Bearer ${token}` } : {})
-      },
-      body: data ? JSON.stringify(data) : undefined,
-      credentials: "include",
-    });
-
-    console.log(`[DEBUG] Response status: ${res.status}`);
-    
-    // Try to parse error response as JSON first
-    if (!res.ok) {
-      let errorMessage: string;
-      try {
-        const errorData = await res.json();
-        errorMessage = errorData.message || errorData.error || res.statusText;
-        if (errorData.errors) {
-          console.error('[DEBUG] Validation errors:', errorData.errors);
-          errorMessage += '\n' + JSON.stringify(errorData.errors);
-        }
-      } catch {
-        // If JSON parsing fails, fall back to text
-        errorMessage = await res.text() || res.statusText;
-      }
-      console.error(`[DEBUG] API error: ${errorMessage}`);
-      throw new Error(errorMessage);
-    }
-
-    return res;
+    const response = await fetch(url, config);
+    return response;
   } catch (error) {
-    console.error('[DEBUG] API request error:', error);
+    console.error("API request failed:", error);
     throw error;
   }
 }

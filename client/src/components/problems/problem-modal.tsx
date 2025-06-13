@@ -98,7 +98,7 @@ export function ProblemModal({ problem, isOpen, onClose }: ProblemModalProps) {
       }
 
       try {
-        const response = await apiRequest("/api/run-code", "POST", {
+        const response = await apiRequest("POST", "/api/problems/run", {
           problemId: problem.id,
           code: code.trim(),
           language
