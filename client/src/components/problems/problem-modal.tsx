@@ -85,35 +85,59 @@ export function ProblemModal({ problem, isOpen, onClose }: ProblemModalProps) {
     onSuccess: (data) => {
       const status = data.status;
       const feedback = data.feedback || '';
+      const score = data.score || '0';
+      const testResults = data.testResults || [];
+      
+      // Convert server test results to frontend format
+      const formattedResults: TestResult[] = testResults.map((result: any) => ({
+        passed: result.passed,
+        output: result.actualOutput,
+        expectedOutput: result.expectedOutput,
+        isHidden: result.isHidden,
+        input: result.input,
+        runtime: result.runtime,
+        memory: result.memory,
+        error: result.error
+      }));
+
+      setTestResults(formattedResults);
+      setActiveTab("results");
       
       if (status === 'accepted') {
         toast({
           title: "Accepted!",
-          description: "All test cases passed! Your solution is correct.",
+          description: `All ${data.totalTestCases} test cases passed! Your solution is correct.`,
           className: "bg-green-50 border-green-200 text-green-800",
         });
       } else if (status === 'partial') {
         toast({
           title: "Partial Credit",
-          description: feedback,
+          description: `${data.passedCount}/${data.totalTestCases} test cases passed (${score}%)`,
           variant: "destructive",
         });
       } else {
         toast({
           title: "Wrong Answer",
-          description: feedback,
+          description: `${data.passedCount}/${data.totalTestCases} test cases passed`,
           variant: "destructive",
         });
       }
       
       queryClient.invalidateQueries({ queryKey: ["/api/submissions"] });
-      onClose();
+      // Don't close modal - let user see detailed results
     },
     onError: (error) => {
       console.error('Submission error:', error);
+      
+      if (error.message.includes('log in')) {
+        // Redirect to login if not authenticated
+        window.location.href = '/login';
+        return;
+      }
+      
       toast({
         title: "Submission Failed",
-        description: error.message || "Please log in to submit solutions.",
+        description: error.message || "Failed to submit solution",
         variant: "destructive",
       });
     },

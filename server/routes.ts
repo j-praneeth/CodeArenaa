@@ -439,15 +439,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(401).json({ message: 'Authentication required. Please log in to submit solutions.' });
       }
 
-      const validatedData = insertSubmissionSchema.parse({
-        ...req.body,
-        userId,
-        status: 'pending',
-        submittedAt: new Date(),
-      });
+      const { problemId, code, language } = req.body;
 
       // Get the problem from database to fetch test cases
-      const problem = await storage.getProblem(validatedData.problemId);
+      const problem = await storage.getProblem(problemId);
       if (!problem) {
         return res.status(404).json({ message: "Problem not found" });
       }
@@ -459,41 +454,69 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ message: "No test cases available for this problem" });
       }
 
-      // Run code against all test cases to determine final status
+      // Run code against all test cases and collect detailed results
       let passedCount = 0;
       let totalTestCases = testCases.length;
       let maxRuntime = 0;
       let maxMemory = 0;
+      const testResults = [];
 
-      for (const testCase of testCases) {
-        const result = await executeCode(validatedData.code, validatedData.language, testCase.input);
+      for (let i = 0; i < testCases.length; i++) {
+        const testCase = testCases[i];
+        const result = await executeCode(code, language, testCase.input);
 
         const passed = result.output.trim() === testCase.expectedOutput.trim();
         if (passed) passedCount++;
 
         maxRuntime = Math.max(maxRuntime, result.runtime);
         maxMemory = Math.max(maxMemory, result.memory);
+
+        // Add detailed test result for frontend display
+        testResults.push({
+          testCase: i + 1,
+          passed,
+          input: testCase.input,
+          expectedOutput: testCase.expectedOutput,
+          actualOutput: result.output,
+          runtime: result.runtime,
+          memory: result.memory,
+          error: result.error,
+          isHidden: testCase.isHidden || false
+        });
       }
 
       // Determine overall status based on test case results
       const allPassed = passedCount === totalTestCases;
       const score = ((passedCount / totalTestCases) * 100).toFixed(2);
-
-      // For actual submissions, save to database
-      validatedData.status = allPassed ? 'accepted' : passedCount > 0 ? 'partial' : 'wrong_answer';
-      validatedData.runtime = maxRuntime;
-      validatedData.memory = maxMemory;
-      validatedData.score = score;
-      validatedData.feedback = allPassed 
+      const status = allPassed ? 'accepted' : passedCount > 0 ? 'partial' : 'wrong_answer';
+      const feedback = allPassed 
         ? 'All test cases passed!' 
         : `${passedCount}/${totalTestCases} test cases passed`;
 
-      const submission = await storage.createSubmission(validatedData);
-      res.status(201).json(submission);
+      // Save submission to database
+      const submissionData = {
+        problemId,
+        userId,
+        code,
+        language,
+        status,
+        runtime: maxRuntime,
+        memory: maxMemory,
+        score,
+        feedback,
+        submittedAt: new Date(),
+      };
+
+      const submission = await storage.createSubmission(submissionData);
+
+      // Return submission with detailed test results
+      res.status(201).json({
+        ...submission,
+        testResults,
+        passedCount,
+        totalTestCases
+      });
     } catch (error) {
-      if (error instanceof z.ZodError) {
-        return res.status(400).json({ message: "Invalid data", errors: error.errors });
-      }
       console.error("Error creating submission:", error);
       res.status(500).json({ message: "Failed to create submission" });
     }
