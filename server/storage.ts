@@ -54,6 +54,11 @@ export interface Course {
   id: number;
   title: string;
   description?: string;
+  category?: string;
+  difficulty?: 'beginner' | 'intermediate' | 'advanced';
+  estimatedHours?: number;
+  prerequisites?: string[];
+  learningObjectives?: string[];
   problems?: number[];
   modules?: number[];
   enrolledUsers?: string[];
@@ -61,6 +66,53 @@ export interface Course {
   createdBy?: string;
   createdAt: Date;
   updatedAt: Date;
+  tags?: string[];
+  rating?: number;
+  enrollmentCount?: number;
+  completionRate?: number;
+}
+
+export interface CourseModule {
+  _id?: ObjectId;
+  id: number;
+  courseId: number;
+  title: string;
+  description: string;
+  order: number;
+  textContent?: string;
+  videoUrl?: string;
+  codeExample?: string;
+  language?: string;
+  expectedOutput?: string;
+  duration?: number;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export interface CourseEnrollment {
+  _id?: ObjectId;
+  id: number;
+  courseId: number;
+  userId: string;
+  completedModules: number[];
+  progress: number;
+  enrolledAt: Date;
+  lastAccessedAt: Date;
+  notes?: { [moduleId: number]: string };
+  bookmarkedModules?: number[];
+}
+
+export interface ModuleProgress {
+  _id?: ObjectId;
+  id: number;
+  moduleId: number;
+  userId: string;
+  courseId: number;
+  isCompleted: boolean;
+  timeSpent: number;
+  completedAt?: Date;
+  notes?: string;
+  bookmarked: boolean;
 }
 
 // Simplified interface for essential operations
@@ -84,8 +136,25 @@ export interface IStorage {
   getCourse(id: number): Promise<Course | undefined>;
   createCourse(course: Partial<Course>): Promise<Course>;
   updateCourse(id: number, courseData: Partial<Course>): Promise<Course | null>;
-  getCourseModules(courseId: number): Promise<any[]>;
-  getCourseEnrollments(courseId?: number, userId?: string): Promise<any[]>;
+  deleteCourse(id: number): Promise<void>;
+  
+  // Course module operations
+  getCourseModules(courseId: number): Promise<CourseModule[]>;
+  getCourseModule(id: number): Promise<CourseModule | undefined>;
+  createCourseModule(module: Partial<CourseModule>): Promise<CourseModule>;
+  updateCourseModule(id: number, moduleData: Partial<CourseModule>): Promise<CourseModule | null>;
+  deleteCourseModule(id: number): Promise<void>;
+  
+  // Course enrollment operations
+  getCourseEnrollments(courseId?: number, userId?: string): Promise<CourseEnrollment[]>;
+  enrollUserInCourse(userId: string, courseId: number): Promise<CourseEnrollment>;
+  getUserCourseProgress(userId: string, courseId: number): Promise<ModuleProgress[]>;
+  markModuleComplete(userId: string, moduleId: number, courseId: number, timeSpent: number, notes?: string): Promise<void>;
+  bookmarkModule(userId: string, moduleId: number): Promise<void>;
+  
+  // Analytics operations
+  getCourseStats(): Promise<any>;
+  getAdminAnalytics(): Promise<any>;
 }
 
 export class MemStorage implements IStorage {

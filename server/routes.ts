@@ -621,26 +621,85 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Enhanced admin analytics endpoint
+  app.get('/api/admin/course-stats', protect, requireAdmin, async (req: AuthRequest, res) => {
+    try {
+      const db = getDb();
+      
+      const [courses, enrollments] = await Promise.all([
+        db.collection('courses').find({}).toArray(),
+        db.collection('courseEnrollments').find({}).toArray()
+      ]);
+      
+      const totalCourses = courses.length;
+      const totalEnrollments = enrollments.length;
+      const averageRating = 4.5; // Mock for now
+      const completionRate = enrollments.length > 0 
+        ? Math.round(enrollments.reduce((sum, e) => sum + (e.progress || 0), 0) / enrollments.length)
+        : 0;
+      
+      // Popular categories
+      const categoryCounts = courses.reduce((acc, course) => {
+        if (course.category) {
+          acc[course.category] = (acc[course.category] || 0) + 1;
+        }
+        return acc;
+      }, {});
+      
+      const popularCategories = Object.entries(categoryCounts)
+        .map(([category, count]) => ({ category, count }))
+        .sort((a, b) => b.count - a.count)
+        .slice(0, 5);
+      
+      // Recent activity
+      const recentEnrollments = await db.collection('courseEnrollments')
+        .find({}).sort({ enrolledAt: -1 }).limit(10).toArray();
+      
+      const recentActivity = await Promise.all(
+        recentEnrollments.map(async (enrollment) => {
+          const course = await db.collection('courses').findOne({ id: enrollment.courseId });
+          return {
+            action: 'User enrolled in course',
+            course: course?.title || 'Unknown Course',
+            timestamp: enrollment.enrolledAt
+          };
+        })
+      );
+      
+      res.json({
+        totalCourses,
+        totalEnrollments,
+        averageRating,
+        completionRate,
+        popularCategories,
+        recentActivity
+      });
+    } catch (error) {
+      console.error('Error fetching course stats:', error);
+      res.status(500).json({ message: 'Failed to fetch course statistics' });
+    }
+  });
+
   app.get('/api/courses/:id', async (req, res) => {
     try {
       const id = parseInt(req.params.id);
-      const course = await storage.getCourse(id);
+      const db = getDb();
       
+      const course = await db.collection('courses').findOne({ id: id });
       if (!course) {
         return res.status(404).json({ message: 'Course not found' });
       }
 
       // Get additional course data
       const [modules, enrollments] = await Promise.all([
-        storage.getCourseModules(id),
-        storage.getCourseEnrollments(id)
+        db.collection('courseModules').find({ courseId: id }).sort({ order: 1 }).toArray(),
+        db.collection('courseEnrollments').find({ courseId: id }).toArray()
       ]);
 
-      // Combine all data
       const courseWithDetails = {
         ...course,
         modules,
-        enrolledUsers: enrollments.map((e: any) => e.userId),
+        enrolledUsers: enrollments.map(e => e.userId),
         enrollmentCount: enrollments.length,
         moduleCount: modules.length
       };
@@ -649,6 +708,279 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error('Error fetching course:', error);
       res.status(500).json({ message: 'Failed to fetch course' });
+    }
+  });
+
+  // Course modules routes
+  app.get('/api/courses/:id/modules', async (req, res) => {
+    try {
+      const courseId = parseInt(req.params.id);
+      const db = getDb();
+      
+      const modules = await db.collection('courseModules')
+        .find({ courseId: courseId })
+        .sort({ order: 1 })
+        .toArray();
+      
+      res.json(modules);
+    } catch (error) {
+      console.error('Error fetching course modules:', error);
+      res.status(500).json({ message: 'Failed to fetch course modules' });
+    }
+  });
+
+  app.post('/api/courses/:id/modules', protect, requireAdmin, async (req: AuthRequest, res) => {
+    try {
+      const courseId = parseInt(req.params.id);
+      const db = getDb();
+      
+      const moduleData = {
+        id: Date.now(),
+        courseId: courseId,
+        ...req.body,
+        createdAt: new Date(),
+        updatedAt: new Date()
+      };
+      
+      const result = await db.collection('courseModules').insertOne(moduleData);
+      res.status(201).json({ ...moduleData, _id: result.insertedId });
+    } catch (error) {
+      console.error('Error creating course module:', error);
+      res.status(500).json({ message: 'Failed to create course module' });
+    }
+  });
+
+  app.put('/api/modules/:id', protect, requireAdmin, async (req: AuthRequest, res) => {
+    try {
+      const moduleId = parseInt(req.params.id);
+      const db = getDb();
+      
+      const result = await db.collection('courseModules').findOneAndUpdate(
+        { id: moduleId },
+        { $set: { ...req.body, updatedAt: new Date() } },
+        { returnDocument: 'after' }
+      );
+      
+      if (!result) {
+        return res.status(404).json({ message: 'Module not found' });
+      }
+      
+      res.json(result);
+    } catch (error) {
+      console.error('Error updating course module:', error);
+      res.status(500).json({ message: 'Failed to update course module' });
+    }
+  });
+
+  app.delete('/api/modules/:id', protect, requireAdmin, async (req: AuthRequest, res) => {
+    try {
+      const moduleId = parseInt(req.params.id);
+      const db = getDb();
+      
+      const result = await db.collection('courseModules').deleteOne({ id: moduleId });
+      
+      if (result.deletedCount === 0) {
+        return res.status(404).json({ message: 'Module not found' });
+      }
+      
+      // Also delete related progress
+      await db.collection('moduleProgress').deleteMany({ moduleId: moduleId });
+      
+      res.status(204).send();
+    } catch (error) {
+      console.error('Error deleting course module:', error);
+      res.status(500).json({ message: 'Failed to delete course module' });
+    }
+  });
+
+  // Course enrollment routes
+  app.post('/api/courses/:id/enroll', protect, async (req: AuthRequest, res) => {
+    try {
+      const courseId = parseInt(req.params.id);
+      const userId = req.user.id;
+      const db = getDb();
+      
+      // Check if already enrolled
+      const existingEnrollment = await db.collection('courseEnrollments')
+        .findOne({ courseId: courseId, userId: userId });
+      
+      if (existingEnrollment) {
+        return res.json(existingEnrollment);
+      }
+      
+      // Create new enrollment
+      const enrollmentData = {
+        id: Date.now(),
+        courseId: courseId,
+        userId: userId,
+        completedModules: [],
+        progress: 0,
+        enrolledAt: new Date(),
+        lastAccessedAt: new Date(),
+        notes: {},
+        bookmarkedModules: []
+      };
+      
+      const result = await db.collection('courseEnrollments').insertOne(enrollmentData);
+      res.status(201).json({ ...enrollmentData, _id: result.insertedId });
+    } catch (error) {
+      console.error('Error enrolling in course:', error);
+      res.status(500).json({ message: 'Failed to enroll in course' });
+    }
+  });
+
+  app.get('/api/users/me/enrollments', protect, async (req: AuthRequest, res) => {
+    try {
+      const userId = req.user.id;
+      const db = getDb();
+      
+      const enrollments = await db.collection('courseEnrollments')
+        .find({ userId: userId })
+        .toArray();
+      
+      res.json(enrollments);
+    } catch (error) {
+      console.error('Error fetching user enrollments:', error);
+      res.status(500).json({ message: 'Failed to fetch user enrollments' });
+    }
+  });
+
+  app.get('/api/courses/:id/enrollments', protect, requireAdmin, async (req: AuthRequest, res) => {
+    try {
+      const courseId = parseInt(req.params.id);
+      const db = getDb();
+      
+      const enrollments = await db.collection('courseEnrollments')
+        .find({ courseId: courseId })
+        .toArray();
+      
+      res.json(enrollments);
+    } catch (error) {
+      console.error('Error fetching course enrollments:', error);
+      res.status(500).json({ message: 'Failed to fetch course enrollments' });
+    }
+  });
+
+  // Course progress routes
+  app.get('/api/courses/:id/progress', protect, async (req: AuthRequest, res) => {
+    try {
+      const courseId = parseInt(req.params.id);
+      const userId = req.user.id;
+      const db = getDb();
+      
+      const progress = await db.collection('moduleProgress')
+        .find({ courseId: courseId, userId: userId })
+        .toArray();
+      
+      res.json(progress);
+    } catch (error) {
+      console.error('Error fetching course progress:', error);
+      res.status(500).json({ message: 'Failed to fetch course progress' });
+    }
+  });
+
+  app.post('/api/courses/:courseId/modules/:moduleId/complete', protect, async (req: AuthRequest, res) => {
+    try {
+      const courseId = parseInt(req.params.courseId);
+      const moduleId = parseInt(req.params.moduleId);
+      const userId = req.user.id;
+      const { timeSpent, notes } = req.body;
+      const db = getDb();
+      
+      // Update or create module progress
+      const existingProgress = await db.collection('moduleProgress')
+        .findOne({ moduleId: moduleId, userId: userId });
+      
+      if (existingProgress) {
+        await db.collection('moduleProgress').updateOne(
+          { moduleId: moduleId, userId: userId },
+          {
+            $set: {
+              isCompleted: true,
+              timeSpent: (existingProgress.timeSpent || 0) + timeSpent,
+              completedAt: new Date(),
+              notes: notes || existingProgress.notes
+            }
+          }
+        );
+      } else {
+        await db.collection('moduleProgress').insertOne({
+          id: Date.now(),
+          moduleId: moduleId,
+          userId: userId,
+          courseId: courseId,
+          isCompleted: true,
+          timeSpent: timeSpent,
+          completedAt: new Date(),
+          notes: notes,
+          bookmarked: false
+        });
+      }
+      
+      // Update enrollment progress
+      const enrollment = await db.collection('courseEnrollments')
+        .findOne({ courseId: courseId, userId: userId });
+      
+      if (enrollment) {
+        const courseModules = await db.collection('courseModules')
+          .find({ courseId: courseId }).toArray();
+        const completedModules = await db.collection('moduleProgress')
+          .find({ courseId: courseId, userId: userId, isCompleted: true }).toArray();
+        
+        const progressPercentage = courseModules.length > 0 
+          ? (completedModules.length / courseModules.length) * 100 
+          : 0;
+        
+        await db.collection('courseEnrollments').updateOne(
+          { courseId: courseId, userId: userId },
+          {
+            $set: {
+              progress: progressPercentage,
+              lastAccessedAt: new Date()
+            },
+            $addToSet: { completedModules: moduleId }
+          }
+        );
+      }
+      
+      res.json({ success: true });
+    } catch (error) {
+      console.error('Error marking module as complete:', error);
+      res.status(500).json({ message: 'Failed to mark module as complete' });
+    }
+  });
+
+  app.post('/api/courses/:courseId/modules/:moduleId/bookmark', protect, async (req: AuthRequest, res) => {
+    try {
+      const moduleId = parseInt(req.params.moduleId);
+      const courseId = parseInt(req.params.courseId);
+      const userId = req.user.id;
+      const db = getDb();
+      
+      const existingProgress = await db.collection('moduleProgress')
+        .findOne({ moduleId: moduleId, userId: userId });
+      
+      if (existingProgress) {
+        await db.collection('moduleProgress').updateOne(
+          { moduleId: moduleId, userId: userId },
+          { $set: { bookmarked: !existingProgress.bookmarked } }
+        );
+      } else {
+        await db.collection('moduleProgress').insertOne({
+          id: Date.now(),
+          moduleId: moduleId,
+          userId: userId,
+          courseId: courseId,
+          isCompleted: false,
+          timeSpent: 0,
+          bookmarked: true
+        });
+      }
+      
+      res.json({ success: true });
+    } catch (error) {
+      console.error('Error bookmarking module:', error);
+      res.status(500).json({ message: 'Failed to bookmark module' });
     }
   });
 
