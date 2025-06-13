@@ -85,10 +85,7 @@ export function CourseWizard() {
 
   const createCourseMutation = useMutation({
     mutationFn: async (courseData: any) => {
-      return apiRequest('/api/courses', {
-        method: 'POST',
-        body: JSON.stringify(courseData)
-      });
+      return apiRequest('/api/courses', 'POST', courseData);
     },
     onSuccess: () => {
       toast({

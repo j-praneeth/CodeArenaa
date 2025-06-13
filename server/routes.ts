@@ -956,7 +956,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const moduleId = parseInt(req.params.moduleId);
       const courseId = parseInt(req.params.courseId);
       const userId = req.user.id;
-      const db = getDb();
+      const db = await connectToMongoDB();
       
       const existingProgress = await db.collection('moduleProgress')
         .findOne({ moduleId: moduleId, userId: userId });

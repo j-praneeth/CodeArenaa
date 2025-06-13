@@ -89,10 +89,7 @@ export function CourseModuleViewer({ courseId, moduleId }: CourseViewerProps) {
 
   const completeModuleMutation = useMutation({
     mutationFn: async (data: { moduleId: number; timeSpent: number; notes?: string }) => {
-      return apiRequest(`/api/courses/${courseId}/modules/${data.moduleId}/complete`, {
-        method: 'POST',
-        body: JSON.stringify({ timeSpent: data.timeSpent, notes: data.notes })
-      });
+      return apiRequest(`/api/courses/${courseId}/modules/${data.moduleId}/complete`, 'POST', { timeSpent: data.timeSpent, notes: data.notes });
     },
     onSuccess: () => {
       toast({
@@ -105,9 +102,7 @@ export function CourseModuleViewer({ courseId, moduleId }: CourseViewerProps) {
 
   const bookmarkMutation = useMutation({
     mutationFn: async (moduleId: number) => {
-      return apiRequest(`/api/courses/${courseId}/modules/${moduleId}/bookmark`, {
-        method: 'POST'
-      });
+      return apiRequest(`/api/courses/${courseId}/modules/${moduleId}/bookmark`, 'POST');
     },
     onSuccess: () => {
       toast({
