@@ -684,7 +684,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get('/api/courses/:id', async (req, res) => {
     try {
       const id = parseInt(req.params.id);
-      const db = getDb();
+      const db = await connectToMongoDB();
       
       const course = await db.collection('courses').findOne({ id: id });
       if (!course) {
@@ -700,7 +700,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const courseWithDetails = {
         ...course,
         modules,
-        enrolledUsers: enrollments.map(e => e.userId),
+        enrolledUsers: enrollments.map((e: any) => e.userId),
         enrollmentCount: enrollments.length,
         moduleCount: modules.length
       };
@@ -716,7 +716,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get('/api/courses/:id/modules', async (req, res) => {
     try {
       const courseId = parseInt(req.params.id);
-      const db = getDb();
+      const db = await connectToMongoDB();
       
       const modules = await db.collection('courseModules')
         .find({ courseId: courseId })
@@ -733,7 +733,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post('/api/courses/:id/modules', protect, requireAdmin, async (req: AuthRequest, res) => {
     try {
       const courseId = parseInt(req.params.id);
-      const db = getDb();
+      const db = await connectToMongoDB();
       
       const moduleData = {
         id: Date.now(),
@@ -989,7 +989,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const id = parseInt(req.params.id);
       const userId = req.user.id;
-      const db = getDb();
+      const db = await connectToMongoDB();
 
       // Check if course exists
       const existingCourse = await db.collection('courses').findOne({ id: id });
@@ -1024,7 +1024,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.delete('/api/courses/:id', protect, requireAdmin, async (req: AuthRequest, res) => {
     try {
       const id = parseInt(req.params.id);
-      const db = getDb();
+      const db = await connectToMongoDB();
 
       // Check if course exists
       const course = await db.collection('courses').findOne({ id: id });
