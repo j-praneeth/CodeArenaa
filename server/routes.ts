@@ -40,7 +40,7 @@ function executeCode(code: string, language: string, input?: string): Promise<{ 
         case 'python':
           fileName = join(tempDir, `temp_${tempId}.py`);
           writeFileSync(fileName, code);
-          command = 'python3';
+          command = 'python';
           args = [fileName];
           break;
 
