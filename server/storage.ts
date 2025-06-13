@@ -1,53 +1,103 @@
-import { ObjectId, Collection, Filter, UpdateFilter } from 'mongodb';
-import { getDb } from './db';
+import {
+  users,
+  problems,
+  submissions,
+  type User,
+  type UpsertUser,
+  type Problem,
+  type InsertProblem,
+  type Submission,
+  type InsertSubmission,
+} from "../shared/schema";
+import { db } from "./db";
+import { eq, desc } from "drizzle-orm";
 
-// MongoDB document interfaces
-export interface User {
-  _id?: ObjectId;
-  id: string;
-  email?: string;
-  firstName?: string;
-  lastName?: string;
-  profileImageUrl?: string;
-  role: string;
-  createdAt: Date;
-  updatedAt: Date;
+// Interface for storage operations
+export interface IStorage {
+  // User operations
+  // (IMPORTANT) these user operations are mandatory for Replit Auth.
+  getUser(id: string): Promise<User | undefined>;
+  upsertUser(user: UpsertUser): Promise<User>;
+  
+  // Problem operations
+  getProblems(): Promise<Problem[]>;
+  getProblem(id: number): Promise<Problem | undefined>;
+  createProblem(problem: InsertProblem): Promise<Problem>;
+  updateProblem(id: number, problem: Partial<InsertProblem>): Promise<Problem | undefined>;
+  deleteProblem(id: number): Promise<void>;
+  
+  // Submission operations
+  getSubmissions(userId: string, problemId?: number): Promise<Submission[]>;
+  createSubmission(submission: InsertSubmission): Promise<Submission>;
 }
 
-export interface UserLogin {
-  _id?: ObjectId;
-  userId: string;
-  timestamp: Date;
-}
+export class DatabaseStorage implements IStorage {
+  // User operations
+  // (IMPORTANT) these user operations are mandatory for Replit Auth.
 
-export interface Problem {
-  _id?: ObjectId;
-  id: number;
-  title: string;
-  description: string;
-  difficulty: string;
-  tags?: string[];
-  constraints?: string;
-  examples?: any;
-  testCases?: any;
-  timeLimit?: number;
-  memoryLimit?: number;
-  starterCode?: any;
-  isPublic: boolean;
-  createdBy?: string;
-  createdAt: Date;
-  updatedAt: Date;
-}
+  async getUser(id: string): Promise<User | undefined> {
+    const [user] = await db.select().from(users).where(eq(users.id, id));
+    return user;
+  }
 
-export interface Submission {
-  _id?: ObjectId;
-  id: number;
-  problemId: number;
-  userId: string;
-  code: string;
-  language: string;
-  status: string;
-  runtime?: number;
+  async upsertUser(userData: UpsertUser): Promise<User> {
+    const [user] = await db
+      .insert(users)
+      .values(userData)
+      .onConflictDoUpdate({
+        target: users.id,
+        set: {
+          ...userData,
+          updatedAt: new Date(),
+        },
+      })
+      .returning();
+    return user;
+  }
+
+  // Problem operations
+  async getProblems(): Promise<Problem[]> {
+    return await db.select().from(problems).where(eq(problems.isPublic, true)).orderBy(problems.id);
+  }
+
+  async getProblem(id: number): Promise<Problem | undefined> {
+    const [problem] = await db.select().from(problems).where(eq(problems.id, id));
+    return problem;
+  }
+
+  async createProblem(problem: InsertProblem): Promise<Problem> {
+    const [newProblem] = await db.insert(problems).values(problem).returning();
+    return newProblem;
+  }
+
+  async updateProblem(id: number, problem: Partial<InsertProblem>): Promise<Problem | undefined> {
+    const [updatedProblem] = await db
+      .update(problems)
+      .set({ ...problem, updatedAt: new Date() })
+      .where(eq(problems.id, id))
+      .returning();
+    return updatedProblem;
+  }
+
+  async deleteProblem(id: number): Promise<void> {
+    await db.delete(problems).where(eq(problems.id, id));
+  }
+
+  // Submission operations
+  async getSubmissions(userId: string, problemId?: number): Promise<Submission[]> {
+    let query = db.select().from(submissions).where(eq(submissions.userId, userId));
+    
+    if (problemId) {
+      query = query.where(eq(submissions.problemId, problemId));
+    }
+    
+    return await query.orderBy(desc(submissions.createdAt));
+  }
+
+  async createSubmission(submission: InsertSubmission): Promise<Submission> {
+    const [newSubmission] = await db.insert(submissions).values(submission).returning();
+    return newSubmission;
+  }
   memory?: number;
   score?: string;
   feedback?: string;

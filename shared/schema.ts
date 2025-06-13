@@ -1,14 +1,88 @@
+import {
+  pgTable,
+  text,
+  varchar,
+  timestamp,
+  jsonb,
+  index,
+  integer,
+  boolean,
+} from "drizzle-orm/pg-core";
+import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
-// MongoDB-compatible schemas using Zod for validation
-export const insertUserSchema = z.object({
-  id: z.string(),
-  email: z.string().email().optional(),
-  firstName: z.string().optional(),
-  lastName: z.string().optional(),
-  profileImageUrl: z.string().url().optional(),
-  role: z.string().default("student"),
+// Session storage table.
+// (IMPORTANT) This table is mandatory for Replit Auth, don't drop it.
+export const sessions = pgTable(
+  "sessions",
+  {
+    sid: varchar("sid").primaryKey(),
+    sess: jsonb("sess").notNull(),
+    expire: timestamp("expire").notNull(),
+  },
+  (table) => [index("IDX_session_expire").on(table.expire)],
+);
+
+// User storage table.
+// (IMPORTANT) This table is mandatory for Replit Auth, don't drop it.
+export const users = pgTable("users", {
+  id: varchar("id").primaryKey().notNull(),
+  email: varchar("email").unique(),
+  firstName: varchar("first_name"),
+  lastName: varchar("last_name"),
+  profileImageUrl: varchar("profile_image_url"),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
 });
+
+export type UpsertUser = typeof users.$inferInsert;
+export type User = typeof users.$inferSelect;
+
+// Problems table
+export const problems = pgTable("problems", {
+  id: integer("id").primaryKey(),
+  title: varchar("title").notNull(),
+  description: text("description").notNull(),
+  difficulty: varchar("difficulty").notNull(),
+  tags: jsonb("tags"),
+  constraints: text("constraints"),
+  inputFormat: text("input_format"),
+  outputFormat: text("output_format"),
+  examples: jsonb("examples"),
+  testCases: jsonb("test_cases"),
+  timeLimit: integer("time_limit").default(1000),
+  memoryLimit: integer("memory_limit").default(256),
+  starterCode: jsonb("starter_code"),
+  isPublic: boolean("is_public").default(true),
+  createdBy: varchar("created_by"),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export type Problem = typeof problems.$inferSelect;
+export type InsertProblem = typeof problems.$inferInsert;
+
+// Submissions table
+export const submissions = pgTable("submissions", {
+  id: integer("id").primaryKey(),
+  problemId: integer("problem_id").notNull(),
+  userId: varchar("user_id").notNull(),
+  code: text("code").notNull(),
+  language: varchar("language").notNull(),
+  status: varchar("status").notNull(),
+  runtime: integer("runtime"),
+  memory: integer("memory"),
+  score: varchar("score"),
+  feedback: text("feedback"),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export type Submission = typeof submissions.$inferSelect;
+export type InsertSubmission = typeof submissions.$inferInsert;
+
+export const insertUserSchema = createInsertSchema(users);
+export const insertProblemSchema = createInsertSchema(problems);
+export const insertSubmissionSchema = createInsertSchema(submissions);
 
 export const testCaseSchema = z.object({
   input: z.string(),

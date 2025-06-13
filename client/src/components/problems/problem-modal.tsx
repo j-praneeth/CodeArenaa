@@ -10,7 +10,7 @@ import { isUnauthorizedError } from "@/lib/authUtils";
 import { CodeEditor } from "@/components/editor/code-editor";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { GuestLogin } from "@/components/auth/guest-login";
+
 import type { Problem, TestCase, Example } from "@/types/problem";
 import { CheckCircle, XCircle } from "lucide-react";
 
@@ -36,7 +36,7 @@ export function ProblemModal({ problem, isOpen, onClose }: ProblemModalProps) {
   const [code, setCode] = useState("");
   const [testResults, setTestResults] = useState<TestResult[]>([]);
   const [activeTab, setActiveTab] = useState("description");
-  const [showGuestLogin, setShowGuestLogin] = useState(false);
+
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
@@ -372,7 +372,12 @@ export function ProblemModal({ problem, isOpen, onClose }: ProblemModalProps) {
                 onClick={() => {
                   const token = localStorage.getItem('token');
                   if (!token) {
-                    setShowGuestLogin(true);
+                    toast({
+                      title: "Login Required",
+                      description: "Please log in to submit solutions.",
+                      variant: "destructive",
+                    });
+                    window.location.href = "/api/auth/google";
                     return;
                   }
                   submitMutation.mutate({ 
@@ -389,19 +394,7 @@ export function ProblemModal({ problem, isOpen, onClose }: ProblemModalProps) {
           </div>
         </div>
       </DialogContent>
-      
-      <GuestLogin
-        isOpen={showGuestLogin}
-        onClose={() => setShowGuestLogin(false)}
-        onSuccess={() => {
-          // Retry submission after successful login
-          submitMutation.mutate({ 
-            problemId: problem.id,
-            code,
-            language
-          });
-        }}
-      />
+
     </Dialog>
   );
 }
