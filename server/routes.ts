@@ -261,8 +261,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Problem routes
-  app.get('/api/problems', protect, async (req: AuthRequest, res) => {
+  // Problem routes - Make public for demo purposes
+  app.get('/api/problems', async (req, res) => {
     try {
       const problems = await storage.getProblems();
       res.json(problems);
@@ -272,7 +272,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.get('/api/problems/:id', protect, async (req: AuthRequest, res) => {
+  app.get('/api/problems/:id', async (req, res) => {
     try {
       const id = parseInt(req.params.id);
       const problem = await storage.getProblem(id);

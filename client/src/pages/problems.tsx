@@ -41,7 +41,12 @@ export default function Problems() {
     queryKey: ["/api/problems"],
     queryFn: async () => {
       try {
-        const res = await fetch(`${config.apiUrl}/api/problems`, fetchOptions);
+        const res = await fetch(`${config.apiUrl}/api/problems`, {
+          credentials: 'include',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+        });
         if (!res.ok) {
           throw new Error(await res.text());
         }
@@ -57,7 +62,7 @@ export default function Problems() {
       }
     },
     retry: false,
-    enabled: isAuthenticated,
+    enabled: true, // Always enabled since API is now public
     staleTime: 30000,
   });
 
@@ -65,9 +70,12 @@ export default function Problems() {
     queryKey: ["/api/submissions"],
     queryFn: async () => {
       try {
+        if (!isAuthenticated || !token) {
+          return [];
+        }
         const res = await fetch(`${config.apiUrl}/api/submissions`, fetchOptions);
         if (!res.ok) {
-          throw new Error(await res.text());
+          return [];
         }
         return res.json();
       } catch (error) {
@@ -76,7 +84,7 @@ export default function Problems() {
       }
     },
     retry: false,
-    enabled: isAuthenticated,
+    enabled: isAuthenticated && !!token,
     staleTime: 30000,
   });
 
@@ -105,14 +113,6 @@ export default function Problems() {
   };
 
   const handleProblemClick = (problem: Problem) => {
-    if (!isAuthenticated) {
-      toast({
-        title: "Authentication Required",
-        description: "Please log in to view problem details.",
-        variant: "destructive",
-      });
-      return;
-    }
     setSelectedProblem(problem);
     setIsModalOpen(true);
   };
