@@ -377,7 +377,8 @@ export function ProblemModal({ problem, isOpen, onClose }: ProblemModalProps) {
                       description: "Please log in to submit solutions.",
                       variant: "destructive",
                     });
-                    window.location.href = "/api/auth/google";
+                    // Redirect to login page - adjust this URL based on your auth setup
+                    window.location.href = "/login";
                     return;
                   }
                   submitMutation.mutate({ 

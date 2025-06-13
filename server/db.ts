@@ -228,4 +228,3 @@ export const getDb = (): Db => {
 export const closeMongoDB = async (): Promise<void> => {
   return DatabaseConnection.getInstance().close();
 };
-

@@ -1,102 +1,201 @@
-import {
-  users,
-  problems,
-  submissions,
-  type User,
-  type UpsertUser,
-  type Problem,
-  type InsertProblem,
-  type Submission,
-  type InsertSubmission,
-} from "../shared/schema";
-import { db } from "./db";
-import { eq, desc } from "drizzle-orm";
+import { ObjectId, Collection, Filter, UpdateFilter } from 'mongodb';
+import { getDb } from './db';
+
+// MongoDB document interfaces
+export interface User {
+  _id?: ObjectId;
+  id: string;
+  email?: string;
+  firstName?: string;
+  lastName?: string;
+  profileImageUrl?: string;
+  role: string;
+  password?: string;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export interface Problem {
+  _id?: ObjectId;
+  id: number;
+  title: string;
+  description: string;
+  difficulty: string;
+  tags?: string[];
+  constraints?: string;
+  examples?: any;
+  testCases?: any;
+  timeLimit?: number;
+  memoryLimit?: number;
+  starterCode?: any;
+  isPublic: boolean;
+  createdBy?: string;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export interface Submission {
+  _id?: ObjectId;
+  id: number;
+  problemId: number;
+  userId: string;
+  code: string;
+  language: string;
+  status: string;
+  runtime?: number;
+  memory?: number;
+  score?: string;
+  feedback?: string;
+  submittedAt: Date;
+}
 
 // Interface for storage operations
 export interface IStorage {
   // User operations
-  // (IMPORTANT) these user operations are mandatory for Replit Auth.
   getUser(id: string): Promise<User | undefined>;
-  upsertUser(user: UpsertUser): Promise<User>;
+  getUserByEmail(email: string): Promise<User | undefined>;
+  createUser(user: Partial<User>): Promise<User>;
   
   // Problem operations
   getProblems(): Promise<Problem[]>;
   getProblem(id: number): Promise<Problem | undefined>;
-  createProblem(problem: InsertProblem): Promise<Problem>;
-  updateProblem(id: number, problem: Partial<InsertProblem>): Promise<Problem | undefined>;
-  deleteProblem(id: number): Promise<void>;
+  createProblem(problem: Partial<Problem>): Promise<Problem>;
   
   // Submission operations
   getSubmissions(userId: string, problemId?: number): Promise<Submission[]>;
-  createSubmission(submission: InsertSubmission): Promise<Submission>;
+  createSubmission(submission: Partial<Submission>): Promise<Submission>;
 }
 
-export class DatabaseStorage implements IStorage {
-  // User operations
-  // (IMPORTANT) these user operations are mandatory for Replit Auth.
+export class MemStorage implements IStorage {
+  private users: User[] = [];
+  private problems: Problem[] = [];
+  private submissions: Submission[] = [];
+  private nextUserId = 1;
+  private nextProblemId = 1;
+  private nextSubmissionId = 1;
 
+  // User operations
   async getUser(id: string): Promise<User | undefined> {
-    const [user] = await db.select().from(users).where(eq(users.id, id));
-    return user;
+    const db = getDb();
+    try {
+      const user = await db.collection('users').findOne(
+        { id: id },
+        { projection: { password: 0 } } // Don't return password
+      );
+      return user || undefined;
+    } catch (error) {
+      console.error('Error fetching user:', error);
+      return undefined;
+    }
   }
 
-  async upsertUser(userData: UpsertUser): Promise<User> {
-    const [user] = await db
-      .insert(users)
-      .values(userData)
-      .onConflictDoUpdate({
-        target: users.id,
-        set: {
-          ...userData,
-          updatedAt: new Date(),
-        },
-      })
-      .returning();
-    return user;
+  async getUserByEmail(email: string): Promise<User | undefined> {
+    const db = getDb();
+    try {
+      const user = await db.collection('users').findOne({ email: email });
+      return user || undefined;
+    } catch (error) {
+      console.error('Error fetching user by email:', error);
+      return undefined;
+    }
+  }
+
+  async createUser(userData: Partial<User>): Promise<User> {
+    const db = getDb();
+    const newUser = {
+      ...userData,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    };
+    
+    try {
+      const result = await db.collection('users').insertOne(newUser);
+      return { ...newUser, _id: result.insertedId } as User;
+    } catch (error) {
+      console.error('Error creating user:', error);
+      throw new Error('Failed to create user');
+    }
   }
 
   // Problem operations
   async getProblems(): Promise<Problem[]> {
-    return await db.select().from(problems).where(eq(problems.isPublic, true)).orderBy(problems.id);
+    const db = getDb();
+    try {
+      const problems = await db.collection('problems')
+        .find({ isPublic: true })
+        .sort({ id: 1 })
+        .toArray();
+      return problems as Problem[];
+    } catch (error) {
+      console.error('Error fetching problems:', error);
+      return [];
+    }
   }
 
   async getProblem(id: number): Promise<Problem | undefined> {
-    const [problem] = await db.select().from(problems).where(eq(problems.id, id));
-    return problem;
+    const db = getDb();
+    try {
+      const problem = await db.collection('problems').findOne({ id: id });
+      return problem as Problem || undefined;
+    } catch (error) {
+      console.error('Error fetching problem:', error);
+      return undefined;
+    }
   }
 
-  async createProblem(problem: InsertProblem): Promise<Problem> {
-    const [newProblem] = await db.insert(problems).values(problem).returning();
-    return newProblem;
-  }
-
-  async updateProblem(id: number, problem: Partial<InsertProblem>): Promise<Problem | undefined> {
-    const [updatedProblem] = await db
-      .update(problems)
-      .set({ ...problem, updatedAt: new Date() })
-      .where(eq(problems.id, id))
-      .returning();
-    return updatedProblem;
-  }
-
-  async deleteProblem(id: number): Promise<void> {
-    await db.delete(problems).where(eq(problems.id, id));
+  async createProblem(problemData: Partial<Problem>): Promise<Problem> {
+    const db = getDb();
+    const newProblem = {
+      id: Date.now(), // Simple ID generation
+      createdAt: new Date(),
+      updatedAt: new Date(),
+      ...problemData,
+    };
+    
+    try {
+      const result = await db.collection('problems').insertOne(newProblem);
+      return { ...newProblem, _id: result.insertedId } as Problem;
+    } catch (error) {
+      console.error('Error creating problem:', error);
+      throw new Error('Failed to create problem');
+    }
   }
 
   // Submission operations
   async getSubmissions(userId: string, problemId?: number): Promise<Submission[]> {
-    let query = db.select().from(submissions).where(eq(submissions.userId, userId));
-    
-    if (problemId) {
-      query = query.where(eq(submissions.problemId, problemId));
+    const db = getDb();
+    try {
+      const filter: Filter<any> = { userId: userId };
+      if (problemId) {
+        filter.problemId = problemId;
+      }
+      
+      const submissions = await db.collection('submissions')
+        .find(filter)
+        .sort({ submittedAt: -1 })
+        .toArray();
+      return submissions as Submission[];
+    } catch (error) {
+      console.error('Error fetching submissions:', error);
+      return [];
     }
-    
-    return await query.orderBy(desc(submissions.createdAt));
   }
 
-  async createSubmission(submission: InsertSubmission): Promise<Submission> {
-    const [newSubmission] = await db.insert(submissions).values(submission).returning();
-    return newSubmission;
+  async createSubmission(submissionData: Partial<Submission>): Promise<Submission> {
+    const db = getDb();
+    const newSubmission = {
+      id: Date.now(), // Simple ID generation
+      ...submissionData,
+      submittedAt: new Date(),
+    };
+    
+    try {
+      const result = await db.collection('submissions').insertOne(newSubmission);
+      return { ...newSubmission, _id: result.insertedId } as Submission;
+    } catch (error) {
+      console.error('Error creating submission:', error);
+      throw new Error('Failed to create submission');
+    }
   }
   memory?: number;
   score?: string;
