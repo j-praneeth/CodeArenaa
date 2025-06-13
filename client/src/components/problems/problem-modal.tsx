@@ -104,12 +104,14 @@ export function ProblemModal({ problem, isOpen, onClose }: ProblemModalProps) {
           language
         });
         
-        if (!response.ok) {
-          const errorText = await response.text();
-          throw new Error(errorText || "Failed to run code");
+        const data = await response.json();
+        
+        // Handle both successful execution and compilation errors
+        // The server returns status 400 for compilation errors, but we still want to show the result
+        if (!response.ok && data.status !== "error") {
+          throw new Error("Failed to run code");
         }
         
-        const data = await response.json();
         return data;
       } catch (error) {
         if (error instanceof Error) {
@@ -134,11 +136,18 @@ export function ProblemModal({ problem, isOpen, onClose }: ProblemModalProps) {
       setTestResults([testResult]);
       setActiveTab("results");
       
-      toast({
-        title: "Code Executed",
-        description: testResult.passed ? "Code ran successfully" : "Code execution failed",
-        variant: testResult.passed ? "default" : "destructive",
-      });
+      if (data.status === "success") {
+        toast({
+          title: "Code Executed Successfully",
+          description: `Runtime: ${data.runtime}ms, Memory: ${data.memory}MB`,
+        });
+      } else {
+        toast({
+          title: "Compilation/Runtime Error",
+          description: data.error || "Your code encountered an error",
+          variant: "destructive",
+        });
+      }
     },
     onError: (error: Error) => {
       console.error("Run code error:", error);

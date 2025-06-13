@@ -43,11 +43,14 @@ export function ProblemModal({ problemId, isOpen, onClose }: ProblemModalProps) 
 
   const runCodeMutation = useMutation({
     mutationFn: async () => {
+      const token = localStorage.getItem('token');
       const response = await fetch('/api/problems/run', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
+          ...(token ? { 'Authorization': `Bearer ${token}` } : {})
         },
+        credentials: 'include',
         body: JSON.stringify({
           problemId: problem?.id,
           code: code,
@@ -55,12 +58,14 @@ export function ProblemModal({ problemId, isOpen, onClose }: ProblemModalProps) 
         })
       });
       
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({ message: 'Unknown error' }));
-        throw new Error(errorData.message || 'Failed to run code');
+      const data = await response.json();
+      
+      // Handle both successful execution and compilation errors
+      if (!response.ok && data.status !== "error") {
+        throw new Error(data.message || 'Failed to run code');
       }
       
-      return response.json();
+      return data;
     },
     onSuccess: (results) => {
       const testResults = {
