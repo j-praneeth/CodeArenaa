@@ -754,7 +754,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.put('/api/modules/:id', protect, requireAdmin, async (req: AuthRequest, res) => {
     try {
       const moduleId = parseInt(req.params.id);
-      const db = getDb();
+      const db = await connectToMongoDB();
       
       const result = await db.collection('courseModules').findOneAndUpdate(
         { id: moduleId },
@@ -776,7 +776,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.delete('/api/modules/:id', protect, requireAdmin, async (req: AuthRequest, res) => {
     try {
       const moduleId = parseInt(req.params.id);
-      const db = getDb();
+      const db = await connectToMongoDB();
       
       const result = await db.collection('courseModules').deleteOne({ id: moduleId });
       
@@ -799,7 +799,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const courseId = parseInt(req.params.id);
       const userId = req.user.id;
-      const db = getDb();
+      const db = await connectToMongoDB();
       
       // Check if already enrolled
       const existingEnrollment = await db.collection('courseEnrollments')
@@ -833,7 +833,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get('/api/users/me/enrollments', protect, async (req: AuthRequest, res) => {
     try {
       const userId = req.user.id;
-      const db = getDb();
+      const db = await connectToMongoDB();
       
       const enrollments = await db.collection('courseEnrollments')
         .find({ userId: userId })
@@ -849,7 +849,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get('/api/courses/:id/enrollments', protect, requireAdmin, async (req: AuthRequest, res) => {
     try {
       const courseId = parseInt(req.params.id);
-      const db = getDb();
+      const db = await connectToMongoDB();
       
       const enrollments = await db.collection('courseEnrollments')
         .find({ courseId: courseId })
@@ -867,7 +867,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const courseId = parseInt(req.params.id);
       const userId = req.user.id;
-      const db = getDb();
+      const db = await connectToMongoDB();
       
       const progress = await db.collection('moduleProgress')
         .find({ courseId: courseId, userId: userId })
@@ -886,7 +886,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const moduleId = parseInt(req.params.moduleId);
       const userId = req.user.id;
       const { timeSpent, notes } = req.body;
-      const db = getDb();
+      const db = await connectToMongoDB();
       
       // Update or create module progress
       const existingProgress = await db.collection('moduleProgress')
