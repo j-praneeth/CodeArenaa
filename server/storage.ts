@@ -81,7 +81,10 @@ export interface IStorage {
   
   // Course operations
   getCourses(): Promise<Course[]>;
+  getCourse(id: number): Promise<Course | undefined>;
   createCourse(course: Partial<Course>): Promise<Course>;
+  getCourseModules(courseId: number): Promise<any[]>;
+  getCourseEnrollments(courseId: number): Promise<any[]>;
 }
 
 export class MemStorage implements IStorage {
@@ -240,6 +243,27 @@ export class MemStorage implements IStorage {
       console.error('Error creating course:', error);
       throw new Error('Failed to create course');
     }
+  }
+
+  async getCourse(id: number): Promise<Course | undefined> {
+    const db = getDb();
+    try {
+      const course = await db.collection('courses').findOne({ id: id });
+      return course as Course | undefined;
+    } catch (error) {
+      console.error('Error fetching course:', error);
+      return undefined;
+    }
+  }
+
+  async getCourseModules(courseId: number): Promise<any[]> {
+    // For now, return empty array since modules functionality isn't fully implemented
+    return [];
+  }
+
+  async getCourseEnrollments(courseId: number): Promise<any[]> {
+    // For now, return empty array since enrollments functionality isn't fully implemented
+    return [];
   }
 
   // Stub methods for compatibility
