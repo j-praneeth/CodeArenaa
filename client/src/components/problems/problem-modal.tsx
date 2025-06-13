@@ -104,14 +104,11 @@ export function ProblemModal({ problem, isOpen, onClose }: ProblemModalProps) {
           language
         });
         
+        // Always try to parse the JSON response first
         const data = await response.json();
         
-        // Handle both successful execution and compilation errors
-        // The server returns status 400 for compilation errors, but we still want to show the result
-        if (!response.ok && data.status !== "error") {
-          throw new Error("Failed to run code");
-        }
-        
+        // For both success and error cases, return the data
+        // The server sends compilation errors with status 400 but we still want to show them
         return data;
       } catch (error) {
         if (error instanceof Error) {
@@ -124,13 +121,13 @@ export function ProblemModal({ problem, isOpen, onClose }: ProblemModalProps) {
       // Create a test result based on the single execution result
       const testResult: TestResult = {
         passed: data.status === "success",
-        output: data.output || "",
+        output: data.status === "error" ? data.error || data.output || "Compilation failed" : (data.output || ""),
         expectedOutput: "Expected output", // This should come from test cases
         isHidden: false,
         input: "Sample input", // This should come from test cases
         runtime: data.runtime || 0,
         memory: data.memory || 0,
-        error: data.error
+        error: data.status === "error" ? (data.error || "Compilation error") : undefined
       };
 
       setTestResults([testResult]);
@@ -144,7 +141,7 @@ export function ProblemModal({ problem, isOpen, onClose }: ProblemModalProps) {
       } else {
         toast({
           title: "Compilation/Runtime Error",
-          description: data.error || "Your code encountered an error",
+          description: data.error || data.output || "Your code encountered an error",
           variant: "destructive",
         });
       }

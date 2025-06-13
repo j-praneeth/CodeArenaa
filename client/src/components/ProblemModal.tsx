@@ -60,24 +60,23 @@ export function ProblemModal({ problemId, isOpen, onClose }: ProblemModalProps) 
       
       const data = await response.json();
       
-      // Handle both successful execution and compilation errors
-      if (!response.ok && data.status !== "error") {
-        throw new Error(data.message || 'Failed to run code');
-      }
-      
+      // Return data for both success and error cases
+      // Server returns 400 for compilation errors but we want to show them
       return data;
     },
     onSuccess: (results) => {
       const testResults = {
         passed: results.status === "success",
-        output: results.output || results.error || "No output",
+        output: results.status === "error" ? (results.error || results.output || "Compilation failed") : (results.output || "No output"),
         runtime: results.runtime || 0,
         memory: results.memory || 0,
       };
       setTestResults(testResults);
       toast({
-        title: testResults.passed ? "Code Executed Successfully" : "Code Execution Failed",
-        description: testResults.passed ? "Your code ran successfully!" : "Your code encountered an error.",
+        title: testResults.passed ? "Code Executed Successfully" : "Compilation/Runtime Error",
+        description: testResults.passed 
+          ? `Runtime: ${results.runtime}ms, Memory: ${results.memory}MB`
+          : (results.error || results.output || "Your code encountered an error"),
         variant: testResults.passed ? "default" : "destructive",
       });
     },
