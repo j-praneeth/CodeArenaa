@@ -49,6 +49,20 @@ export interface Submission {
   submittedAt: Date;
 }
 
+export interface Course {
+  _id?: ObjectId;
+  id: number;
+  title: string;
+  description?: string;
+  problems?: number[];
+  modules?: number[];
+  enrolledUsers?: string[];
+  isPublic: boolean;
+  createdBy?: string;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
 // Simplified interface for essential operations
 export interface IStorage {
   // User operations
@@ -64,6 +78,10 @@ export interface IStorage {
   // Submission operations
   getSubmissions(userId: string, problemId?: number): Promise<Submission[]>;
   createSubmission(submission: Partial<Submission>): Promise<Submission>;
+  
+  // Course operations
+  getCourses(): Promise<Course[]>;
+  createCourse(course: Partial<Course>): Promise<Course>;
 }
 
 export class MemStorage implements IStorage {
@@ -191,6 +209,39 @@ export class MemStorage implements IStorage {
     }
   }
 
+  // Course operations
+  async getCourses(): Promise<Course[]> {
+    const db = getDb();
+    try {
+      const courses = await db.collection('courses')
+        .find({ isPublic: true })
+        .sort({ id: 1 })
+        .toArray();
+      return courses as Course[];
+    } catch (error) {
+      console.error('Error fetching courses:', error);
+      return [];
+    }
+  }
+
+  async createCourse(courseData: Partial<Course>): Promise<Course> {
+    const db = getDb();
+    const newCourse = {
+      id: Date.now(), // Simple ID generation
+      ...courseData,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    };
+    
+    try {
+      const result = await db.collection('courses').insertOne(newCourse);
+      return { ...newCourse, _id: result.insertedId } as Course;
+    } catch (error) {
+      console.error('Error creating course:', error);
+      throw new Error('Failed to create course');
+    }
+  }
+
   // Stub methods for compatibility
   async getAdminAnalytics(): Promise<any> { return {}; }
   async getAllUsers(): Promise<User[]> { return []; }
@@ -203,11 +254,6 @@ export class MemStorage implements IStorage {
   async getContests(): Promise<any[]> { return []; }
   async getContest(): Promise<any> { return null; }
   async createContest(): Promise<any> { return null; }
-  async getCourses(): Promise<any[]> { return []; }
-  async createCourse(): Promise<any> { return null; }
-  async getCourse(): Promise<any> { return null; }
-  async getCourseModules(): Promise<any[]> { return []; }
-  async getCourseEnrollments(): Promise<any[]> { return []; }
   async updateCourse(): Promise<any> { return null; }
   async deleteCourseModule(): Promise<void> { }
   async deleteCourseEnrollment(): Promise<void> { }
