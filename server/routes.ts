@@ -1,6 +1,7 @@
 import type { Express } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
+import { connectToMongoDB } from "./db";
 import { protect, requireAdmin as requireAdminMiddleware, AuthRequest } from "./middleware/auth";
 import { 
   insertProblemSchema, 
@@ -624,7 +625,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Enhanced admin analytics endpoint
   app.get('/api/admin/course-stats', protect, requireAdmin, async (req: AuthRequest, res) => {
     try {
-      const db = getDb();
+      const db = await connectToMongoDB();
       
       const [courses, enrollments] = await Promise.all([
         db.collection('courses').find({}).toArray(),
@@ -635,11 +636,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const totalEnrollments = enrollments.length;
       const averageRating = 4.5; // Mock for now
       const completionRate = enrollments.length > 0 
-        ? Math.round(enrollments.reduce((sum, e) => sum + (e.progress || 0), 0) / enrollments.length)
+        ? Math.round(enrollments.reduce((sum: number, e: any) => sum + (e.progress || 0), 0) / enrollments.length)
         : 0;
       
       // Popular categories
-      const categoryCounts = courses.reduce((acc, course) => {
+      const categoryCounts = courses.reduce((acc: any, course: any) => {
         if (course.category) {
           acc[course.category] = (acc[course.category] || 0) + 1;
         }
@@ -648,7 +649,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       const popularCategories = Object.entries(categoryCounts)
         .map(([category, count]) => ({ category, count }))
-        .sort((a, b) => b.count - a.count)
+        .sort((a: any, b: any) => (b.count as number) - (a.count as number))
         .slice(0, 5);
       
       // Recent activity
@@ -656,7 +657,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         .find({}).sort({ enrolledAt: -1 }).limit(10).toArray();
       
       const recentActivity = await Promise.all(
-        recentEnrollments.map(async (enrollment) => {
+        recentEnrollments.map(async (enrollment: any) => {
           const course = await db.collection('courses').findOne({ id: enrollment.courseId });
           return {
             action: 'User enrolled in course',
@@ -988,28 +989,33 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const id = parseInt(req.params.id);
       const userId = req.user.id;
+      const db = getDb();
 
       // Check if course exists
-      const existingCourse = await storage.getCourse(id);
+      const existingCourse = await db.collection('courses').findOne({ id: id });
       if (!existingCourse) {
         return res.status(404).json({ message: 'Course not found' });
       }
 
-      // Validate the update data
-      const validatedData = insertCourseSchema.partial().parse({
-        title: req.body.title,
-        description: req.body.description,
-        isPublic: req.body.isPublic,
+      // Update the course
+      const updateData = {
+        ...req.body,
         updatedBy: userId,
         updatedAt: new Date()
-      });
+      };
 
-      const course = await storage.updateCourse(id, validatedData);
-      res.json(course);
-    } catch (error) {
-      if (error instanceof z.ZodError) {
-        return res.status(400).json({ message: "Invalid data", errors: error.errors });
+      const result = await db.collection('courses').findOneAndUpdate(
+        { id: id },
+        { $set: updateData },
+        { returnDocument: 'after' }
+      );
+
+      if (!result) {
+        return res.status(404).json({ message: 'Course not found' });
       }
+
+      res.json(result);
+    } catch (error) {
       console.error('Error updating course:', error);
       res.status(500).json({ message: 'Failed to update course' });
     }
@@ -1018,28 +1024,28 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.delete('/api/courses/:id', protect, requireAdmin, async (req: AuthRequest, res) => {
     try {
       const id = parseInt(req.params.id);
+      const db = getDb();
 
       // Check if course exists
-      const course = await storage.getCourse(id);
+      const course = await db.collection('courses').findOne({ id: id });
       if (!course) {
         return res.status(404).json({ message: 'Course not found' });
       }
 
-      // Get course modules and enrollments
-      const modules = await storage.getCourseModules(id);
-      const enrollments = await storage.getCourseEnrollments(id);
-
-      // Delete all related data
-      for (const module of modules) {
-        await storage.deleteCourseModule(module.id);
-      }
-
-      for (const enrollment of enrollments) {
-        await storage.deleteCourseEnrollment(enrollment.id);
-      }
+      // Delete all related data in parallel for better performance
+      await Promise.all([
+        db.collection('courseModules').deleteMany({ courseId: id }),
+        db.collection('courseEnrollments').deleteMany({ courseId: id }),
+        db.collection('moduleProgress').deleteMany({ courseId: id })
+      ]);
 
       // Finally delete the course
-      await storage.deleteCourse(id);
+      const result = await db.collection('courses').deleteOne({ id: id });
+      
+      if (result.deletedCount === 0) {
+        return res.status(404).json({ message: 'Course not found' });
+      }
+
       res.status(204).send();
     } catch (error) {
       console.error('Error deleting course:', error);
