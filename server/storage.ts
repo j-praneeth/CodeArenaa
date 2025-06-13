@@ -85,7 +85,7 @@ export interface IStorage {
   createCourse(course: Partial<Course>): Promise<Course>;
   updateCourse(id: number, courseData: Partial<Course>): Promise<Course | null>;
   getCourseModules(courseId: number): Promise<any[]>;
-  getCourseEnrollments(courseId: number): Promise<any[]>;
+  getCourseEnrollments(courseId?: number, userId?: string): Promise<any[]>;
 }
 
 export class MemStorage implements IStorage {
@@ -262,7 +262,7 @@ export class MemStorage implements IStorage {
     return [];
   }
 
-  async getCourseEnrollments(courseId: number): Promise<any[]> {
+  async getCourseEnrollments(courseId?: number, userId?: string): Promise<any[]> {
     // For now, return empty array since enrollments functionality isn't fully implemented
     return [];
   }
