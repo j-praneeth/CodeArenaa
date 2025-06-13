@@ -10,6 +10,7 @@ import { isUnauthorizedError } from "@/lib/authUtils";
 import { CodeEditor } from "@/components/editor/code-editor";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { GuestLogin } from "@/components/auth/guest-login";
 import type { Problem, TestCase, Example } from "@/types/problem";
 import { CheckCircle, XCircle } from "lucide-react";
 
@@ -35,6 +36,7 @@ export function ProblemModal({ problem, isOpen, onClose }: ProblemModalProps) {
   const [code, setCode] = useState("");
   const [testResults, setTestResults] = useState<TestResult[]>([]);
   const [activeTab, setActiveTab] = useState("description");
+  const [showGuestLogin, setShowGuestLogin] = useState(false);
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
@@ -58,31 +60,60 @@ export function ProblemModal({ problem, isOpen, onClose }: ProblemModalProps) {
 
   const submitMutation = useMutation({
     mutationFn: async (submissionData: { problemId: number; code: string; language: string }) => {
-      await apiRequest("POST", "/api/submissions", submissionData);
-    },
-    onSuccess: () => {
-      toast({
-        title: "Success",
-        description: "Your solution has been submitted!",
+      const token = localStorage.getItem('token');
+      if (!token) {
+        throw new Error('Please log in to submit solutions');
+      }
+      
+      const response = await fetch(`/api/submissions`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+        },
+        credentials: 'include',
+        body: JSON.stringify(submissionData),
       });
+      
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.message || 'Failed to submit solution');
+      }
+      
+      return response.json();
+    },
+    onSuccess: (data) => {
+      const status = data.status;
+      const feedback = data.feedback || '';
+      
+      if (status === 'accepted') {
+        toast({
+          title: "Accepted!",
+          description: "All test cases passed! Your solution is correct.",
+          className: "bg-green-50 border-green-200 text-green-800",
+        });
+      } else if (status === 'partial') {
+        toast({
+          title: "Partial Credit",
+          description: feedback,
+          variant: "destructive",
+        });
+      } else {
+        toast({
+          title: "Wrong Answer",
+          description: feedback,
+          variant: "destructive",
+        });
+      }
+      
       queryClient.invalidateQueries({ queryKey: ["/api/submissions"] });
       onClose();
     },
     onError: (error) => {
-      if (isUnauthorizedError(error)) {
-        toast({
-          title: "Unauthorized",
-          description: "You are logged out. Logging in again...",
-          variant: "destructive",
-        });
-        setTimeout(() => {
-          window.location.href = "/api/login";
-        }, 500);
-        return;
-      }
+      console.error('Submission error:', error);
       toast({
-        title: "Error",
-        description: "Failed to submit solution. Please try again.",
+        title: "Submission Failed",
+        description: error.message || "Please log in to submit solutions.",
         variant: "destructive",
       });
     },
@@ -338,11 +369,18 @@ export function ProblemModal({ problem, isOpen, onClose }: ProblemModalProps) {
               </Button>
               <Button
                 variant="default"
-                onClick={() => submitMutation.mutate({ 
-                  problemId: problem.id,
-                  code,
-                  language
-                })}
+                onClick={() => {
+                  const token = localStorage.getItem('token');
+                  if (!token) {
+                    setShowGuestLogin(true);
+                    return;
+                  }
+                  submitMutation.mutate({ 
+                    problemId: problem.id,
+                    code,
+                    language
+                  });
+                }}
                 disabled={submitMutation.isPending}
               >
                 {submitMutation.isPending ? "Submitting..." : "Submit Solution"}
@@ -351,6 +389,19 @@ export function ProblemModal({ problem, isOpen, onClose }: ProblemModalProps) {
           </div>
         </div>
       </DialogContent>
+      
+      <GuestLogin
+        isOpen={showGuestLogin}
+        onClose={() => setShowGuestLogin(false)}
+        onSuccess={() => {
+          // Retry submission after successful login
+          submitMutation.mutate({ 
+            problemId: problem.id,
+            code,
+            language
+          });
+        }}
+      />
     </Dialog>
   );
 }

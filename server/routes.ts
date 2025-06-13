@@ -431,6 +431,37 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Add guest login endpoint
+  app.post('/api/auth/guest', async (req, res) => {
+    try {
+      const { name } = req.body;
+      const guestName = name || 'Anonymous User';
+      
+      // Create a guest user session
+      const guestUser = {
+        id: `guest-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+        email: null,
+        firstName: guestName.split(' ')[0] || 'Guest',
+        lastName: guestName.split(' ').slice(1).join(' ') || 'User',
+        role: 'guest'
+      };
+      
+      // Generate a simple token for guest session
+      const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key';
+      const jwt = require('jsonwebtoken');
+      const token = jwt.sign(guestUser, JWT_SECRET, { expiresIn: '24h' });
+      
+      res.json({
+        token,
+        user: guestUser,
+        message: 'Guest session created successfully'
+      });
+    } catch (error) {
+      console.error('Guest login error:', error);
+      res.status(500).json({ message: 'Failed to create guest session' });
+    }
+  });
+
   app.post('/api/submissions', protect, async (req: AuthRequest, res) => {
     try {
       const userId = req.user.id;
