@@ -625,6 +625,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const id = parseInt(req.params.id);
       const course = await storage.getCourse(id);
+      
       if (!course) {
         return res.status(404).json({ message: 'Course not found' });
       }
@@ -639,7 +640,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const courseWithDetails = {
         ...course,
         modules,
-        enrolledUsers: enrollments.map(e => e.userId),
+        enrolledUsers: enrollments.map((e: any) => e.userId),
         enrollmentCount: enrollments.length,
         moduleCount: modules.length
       };

@@ -83,6 +83,7 @@ export interface IStorage {
   getCourses(): Promise<Course[]>;
   getCourse(id: number): Promise<Course | undefined>;
   createCourse(course: Partial<Course>): Promise<Course>;
+  updateCourse(id: number, courseData: Partial<Course>): Promise<Course | null>;
   getCourseModules(courseId: number): Promise<any[]>;
   getCourseEnrollments(courseId: number): Promise<any[]>;
 }
@@ -266,6 +267,26 @@ export class MemStorage implements IStorage {
     return [];
   }
 
+  async updateCourse(id: number, courseData: Partial<Course>): Promise<Course | null> {
+    const db = getDb();
+    try {
+      const result = await db.collection('courses').findOneAndUpdate(
+        { id: id },
+        { 
+          $set: { 
+            ...courseData, 
+            updatedAt: new Date() 
+          } 
+        },
+        { returnDocument: 'after' }
+      );
+      return result as Course | null;
+    } catch (error) {
+      console.error('Error updating course:', error);
+      return null;
+    }
+  }
+
   // Stub methods for compatibility
   async getAdminAnalytics(): Promise<any> { return {}; }
   async getAllUsers(): Promise<User[]> { return []; }
@@ -278,7 +299,7 @@ export class MemStorage implements IStorage {
   async getContests(): Promise<any[]> { return []; }
   async getContest(): Promise<any> { return null; }
   async createContest(): Promise<any> { return null; }
-  async updateCourse(): Promise<any> { return null; }
+
   async deleteCourseModule(): Promise<void> { }
   async deleteCourseEnrollment(): Promise<void> { }
   async deleteCourse(): Promise<void> { }
