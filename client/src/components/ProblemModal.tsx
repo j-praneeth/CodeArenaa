@@ -43,21 +43,38 @@ export function ProblemModal({ problemId, isOpen, onClose }: ProblemModalProps) 
 
   const runCodeMutation = useMutation({
     mutationFn: async () => {
-      // Mock run - in real implementation, this would execute against sample test cases
-      const mockResults = {
-        passed: Math.random() > 0.3,
-        output: "Sample output",
-        runtime: Math.floor(Math.random() * 100) + 50,
-        memory: Math.floor(Math.random() * 1000) + 500,
-      };
-      return mockResults;
+      const response = await fetch('/api/problems/run', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${localStorage.getItem('token')}`
+        },
+        body: JSON.stringify({
+          problemId: problem?.id,
+          code: code,
+          language: selectedLanguage
+        })
+      });
+      
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({ message: 'Unknown error' }));
+        throw new Error(errorData.message || 'Failed to run code');
+      }
+      
+      return response.json();
     },
     onSuccess: (results) => {
-      setTestResults(results);
+      const testResults = {
+        passed: results.status === "success",
+        output: results.output || results.error || "No output",
+        runtime: results.runtime || 0,
+        memory: results.memory || 0,
+      };
+      setTestResults(testResults);
       toast({
-        title: results.passed ? "Test Passed" : "Test Failed",
-        description: results.passed ? "Your code passed the sample test case!" : "Your code failed the sample test case.",
-        variant: results.passed ? "default" : "destructive",
+        title: testResults.passed ? "Code Executed Successfully" : "Code Execution Failed",
+        description: testResults.passed ? "Your code ran successfully!" : "Your code encountered an error.",
+        variant: testResults.passed ? "default" : "destructive",
       });
     },
     onError: () => {
