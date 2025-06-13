@@ -434,10 +434,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.post('/api/submissions', protect, async (req: AuthRequest, res) => {
     try {
-      const userId = req.user.id;
+      const userId = req.user?.id;
       if (!userId) {
-        console.error('[DEBUG] No user ID found in request:', req.user);
-        return res.status(401).json({ message: "User ID not found" });
+        return res.status(401).json({ message: 'Authentication required. Please log in to submit solutions.' });
       }
 
       const validatedData = insertSubmissionSchema.parse({
@@ -1318,6 +1317,116 @@ export async function registerRoutes(app: Express): Promise<Server> {
       console.error("Error updating user role:", error);
       res.status(500).json({ message: "Failed to update user role" });
     }
+  });
+
+  // Add authentication endpoints for email/password login
+  app.post('/api/auth/signup', async (req, res) => {
+    try {
+      const { email, password } = req.body;
+      
+      if (!email || !password) {
+        return res.status(400).json({ message: 'Email and password are required' });
+      }
+
+      // Check if user already exists
+      const existingUser = await storage.getUserByEmail(email);
+      if (existingUser) {
+        return res.status(400).json({ message: 'User already exists with this email' });
+      }
+
+      // Hash password
+      const bcrypt = require('bcryptjs');
+      const hashedPassword = await bcrypt.hash(password, 10);
+
+      // Create user
+      const newUser = await storage.createUser({
+        id: `user-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+        email,
+        password: hashedPassword,
+        role: 'student'
+      });
+
+      // Generate JWT token
+      const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key';
+      const jwt = require('jsonwebtoken');
+      const token = jwt.sign(
+        { 
+          id: newUser.id, 
+          email: newUser.email, 
+          role: newUser.role 
+        }, 
+        JWT_SECRET, 
+        { expiresIn: '7d' }
+      );
+
+      res.json({
+        token,
+        user: {
+          id: newUser.id,
+          email: newUser.email,
+          role: newUser.role
+        },
+        message: 'Account created successfully'
+      });
+    } catch (error) {
+      console.error('Signup error:', error);
+      res.status(500).json({ message: 'Failed to create account' });
+    }
+  });
+
+  app.post('/api/auth/login', async (req, res) => {
+    try {
+      const { email, password } = req.body;
+      
+      if (!email || !password) {
+        return res.status(400).json({ message: 'Email and password are required' });
+      }
+
+      // Find user by email
+      const user = await storage.getUserByEmail(email);
+      if (!user || !user.password) {
+        return res.status(401).json({ message: 'Invalid email or password' });
+      }
+
+      // Check password
+      const bcrypt = require('bcryptjs');
+      const isValidPassword = await bcrypt.compare(password, user.password);
+      if (!isValidPassword) {
+        return res.status(401).json({ message: 'Invalid email or password' });
+      }
+
+      // Generate JWT token
+      const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key';
+      const jwt = require('jsonwebtoken');
+      const token = jwt.sign(
+        { 
+          id: user.id, 
+          email: user.email, 
+          role: user.role 
+        }, 
+        JWT_SECRET, 
+        { expiresIn: '7d' }
+      );
+
+      res.json({
+        token,
+        user: {
+          id: user.id,
+          email: user.email,
+          role: user.role
+        },
+        message: 'Login successful'
+      });
+    } catch (error) {
+      console.error('Login error:', error);
+      res.status(500).json({ message: 'Failed to login' });
+    }
+  });
+
+  // Google OAuth login placeholder
+  app.get('/api/auth/google', (req, res) => {
+    // For now, redirect to manual login
+    res.redirect('/login?provider=google');
   });
 
   return server;

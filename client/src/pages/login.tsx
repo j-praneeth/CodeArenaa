@@ -16,13 +16,20 @@ export default function Login() {
   const loginMutation = useMutation({
     mutationFn: async (credentials: { email: string; password: string; isSignup: boolean }) => {
       const endpoint = credentials.isSignup ? '/api/auth/signup' : '/api/auth/login';
-      return await apiRequest(endpoint, {
+      const response = await fetch(endpoint, {
         method: 'POST',
         body: JSON.stringify(credentials),
         headers: {
           'Content-Type': 'application/json',
         },
       });
+      
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.message || 'Request failed');
+      }
+      
+      return await response.json();
     },
     onSuccess: (data: any) => {
       if (data.token) {
