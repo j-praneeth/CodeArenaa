@@ -30,7 +30,6 @@ import CreateAssignment from "@/pages/CreateAssignment";
 import AdminProblems from "@/pages/admin/problems";
 import AdminContests from "@/pages/admin/contests";
 import AdminCourses from "@/pages/admin/courses";
-import CreateCourse from "@/pages/admin/CreateCourse";
 import AdminLeaderboard from "@/pages/admin/leaderboard";
 import { useAuth } from "@/hooks/useAuth";
 import CourseDetail from "@/pages/admin/CourseDetail";
@@ -134,11 +133,6 @@ function AppContent() {
             <Route path="/admin/courses">
               <AdminRoute>
                 <AdminCourses />
-              </AdminRoute>
-            </Route>
-            <Route path="/admin/courses/create">
-              <AdminRoute>
-                <CreateCourse />
               </AdminRoute>
             </Route>
             <Route path="/admin/courses/wizard">

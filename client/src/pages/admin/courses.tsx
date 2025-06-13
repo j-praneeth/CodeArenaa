@@ -81,7 +81,7 @@ export default function AdminCourses() {
             Manage your courses and their content
           </p>
         </div>
-        <Button onClick={() => setLocation('/admin/courses/create')}>
+        <Button onClick={() => setLocation('/admin/courses/wizard')}>
           <Plus className="h-4 w-4 mr-2" />
           Create Course
         </Button>
