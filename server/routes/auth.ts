@@ -250,8 +250,8 @@ router.post('/logout', async (req: Request, res: Response) => {
 // Google OAuth Configuration
 const GOOGLE_CLIENT_ID = '835089395113-em66ufur3muaj47ea3b53mubjonpreq0.apps.googleusercontent.com';
 const GOOGLE_CLIENT_SECRET = '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';
-const GOOGLE_CALLBACK_URL = 'http://localhost:5000/api/auth/google/callback';
-const FRONTEND_URL = 'http://localhost:5000';
+const GOOGLE_CALLBACK_URL = 'http://0.0.0.0:5000/api/auth/google/callback';
+const FRONTEND_URL = 'http://0.0.0.0:5000';
 
 console.log('[DEBUG] Setting up Google OAuth with:');
 console.log('- Client ID:', GOOGLE_CLIENT_ID ? 'Set' : 'Not set');

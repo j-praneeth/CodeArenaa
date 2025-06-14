@@ -18,8 +18,8 @@ const app = express();
 // Enable CORS for development
 app.use(cors({
   origin: process.env.NODE_ENV === 'production' 
-    ? process.env.FRONTEND_URL || 'http://localhost:5000'
-    : 'http://localhost:5000',
+    ? process.env.FRONTEND_URL || 'http://0.0.0.0:5000'
+    : 'http://0.0.0.0:5000',
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization']
@@ -80,7 +80,7 @@ app.use('/api/auth', (req, res, next) => {
   }
 
   const port = parseInt(process.env.PORT || '5000', 10);
-  const host = process.env.HOST || 'localhost';
+  const host = process.env.HOST || '0.0.0.0';
   
   server.listen(port, host, () => {
     log(`API Server running on http://${host}:${port}`);
