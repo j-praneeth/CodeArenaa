@@ -1,14 +1,14 @@
 const { MongoClient } = require('mongodb');
 
 async function makeAdmin(email) {
-  const uri = 'mongodb://localhost:27017';
+  const uri = process.env.MONGODB_URL || "mongodb+srv://bandarin29:meritcurve@meritcurve.73u7fr7.mongodb.net/";
   const client = new MongoClient(uri);
 
   try {
     await client.connect();
     console.log('Connected to MongoDB');
 
-    const db = client.db('codearena');
+    const db = client.db('meritcurve');
     const users = db.collection('users');
 
     const result = await users.updateOne(
