@@ -103,6 +103,9 @@ function AppContent() {
             <Route path="/courses">
               {user?.role === 'admin' ? <AdminCourses /> : <Courses />}
             </Route>
+            <Route path="/courses/:courseId">
+              <CourseModuleViewer />
+            </Route>
             <Route path="/courses/:courseId/modules/:moduleId">
               <CourseModuleViewer />
             </Route>
