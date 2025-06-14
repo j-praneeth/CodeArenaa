@@ -1,5 +1,5 @@
 import { ObjectId, Collection, Filter, UpdateFilter } from 'mongodb';
-import { getDb } from './db';
+import { getDb, connectToMongoDB } from './db';
 
 // MongoDB document interfaces
 export interface User {
@@ -284,8 +284,8 @@ export class MemStorage implements IStorage {
 
   // Course operations
   async getCourses(): Promise<Course[]> {
-    const db = getDb();
     try {
+      const db = await connectToMongoDB();
       const courses = await db.collection('courses')
         .find({ isPublic: true })
         .sort({ id: 1 })
@@ -298,16 +298,18 @@ export class MemStorage implements IStorage {
   }
 
   async createCourse(courseData: Partial<Course>): Promise<Course> {
-    const db = getDb();
-    const newCourse = {
-      id: Date.now(), // Simple ID generation
-      ...courseData,
-      createdAt: new Date(),
-      updatedAt: new Date(),
-    };
-    
     try {
+      const db = await connectToMongoDB();
+      const newCourse = {
+        id: Date.now(), // Simple ID generation
+        ...courseData,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      };
+      
+      console.log('Creating course with data:', newCourse);
       const result = await db.collection('courses').insertOne(newCourse);
+      console.log('Course created successfully with ID:', result.insertedId);
       return { ...newCourse, _id: result.insertedId } as Course;
     } catch (error) {
       console.error('Error creating course:', error);
@@ -316,8 +318,8 @@ export class MemStorage implements IStorage {
   }
 
   async getCourse(id: number): Promise<Course | undefined> {
-    const db = getDb();
     try {
+      const db = await connectToMongoDB();
       const course = await db.collection('courses').findOne({ id: id });
       return course as Course | undefined;
     } catch (error) {
