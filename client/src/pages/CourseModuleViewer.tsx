@@ -83,15 +83,20 @@ export default function CourseModuleViewer() {
     queryKey: ['course-progress', courseId],
     queryFn: async () => {
       const response = await fetch(`/api/courses/${courseId}/progress`);
-      if (!response.ok) throw new Error('Failed to fetch progress');
+      if (!response.ok) {
+        // If user is not enrolled, return null instead of throwing error
+        if (response.status === 404) return null;
+        throw new Error('Failed to fetch progress');
+      }
       return response.json() as Promise<CourseProgress>;
-    }
+    },
+    retry: false
   });
 
-  // Get current module
-  const modulesList = (modules as CourseModule[]) || [];
+  // Get current module with proper type safety
+  const modulesList = Array.isArray(modules) ? (modules as CourseModule[]) : [];
   const currentModuleIndex = modulesList.findIndex(m => m.id.toString() === moduleId);
-  const currentModule = currentModuleIndex >= 0 ? modulesList[currentModuleIndex] : modulesList[0];
+  const currentModule = currentModuleIndex >= 0 ? modulesList[currentModuleIndex] : undefined;
 
   // Update code when module changes
   useEffect(() => {
@@ -167,6 +172,7 @@ export default function CourseModuleViewer() {
   // Mark module complete mutation
   const markCompleteMutation = useMutation({
     mutationFn: async () => {
+      if (!currentModule) throw new Error('No module selected');
       const response = await fetch(`/api/courses/${courseId}/modules/${currentModule.id}/complete`, {
         method: 'POST'
       });
@@ -230,16 +236,16 @@ export default function CourseModuleViewer() {
               Back to Courses
             </Button>
             <div>
-              <h1 className="text-xl font-bold">{course.title}</h1>
-              <p className="text-sm text-muted-foreground">{currentModule.title}</p>
+              <h1 className="text-xl font-bold">{course?.title || 'Course'}</h1>
+              <p className="text-sm text-muted-foreground">{currentModule?.title || 'Module'}</p>
             </div>
           </div>
           <div className="flex items-center space-x-4">
             {progress && (
               <div className="flex items-center space-x-2">
                 <span className="text-sm">Progress:</span>
-                <Progress value={progress.enrollment.progress} className="w-24" />
-                <span className="text-sm">{progress.enrollment.progress}%</span>
+                <Progress value={progress?.enrollment?.progress || 0} className="w-24" />
+                <span className="text-sm">{progress?.enrollment?.progress || 0}%</span>
               </div>
             )}
             <Button
