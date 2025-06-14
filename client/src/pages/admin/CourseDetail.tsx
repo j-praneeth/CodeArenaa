@@ -81,6 +81,18 @@ export default function CourseDetail() {
     enabled: !!courseId && !isNaN(courseId),
   });
 
+  // Fetch course modules
+  const { data: modules = [], isLoading: modulesLoading } = useQuery({
+    queryKey: ['course-modules', courseId],
+    queryFn: async () => {
+      if (!courseId || isNaN(courseId)) return [];
+      const response = await fetch(`/api/courses/${courseId}/modules`);
+      if (!response.ok) throw new Error('Failed to fetch modules');
+      return response.json() as Promise<CourseModule[]>;
+    },
+    enabled: !!courseId && !isNaN(courseId),
+  });
+
   const deleteCourseMutation = useMutation({
     mutationFn: async () => {
       const response = await fetch(`/api/courses/${courseId}`, {
@@ -187,8 +199,7 @@ export default function CourseDetail() {
     );
   }
 
-  // Use modules from course data or default to empty array
-  const modules = course.modules || [];
+
 
   return (
     <div className="container mx-auto py-8">
