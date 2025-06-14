@@ -40,12 +40,8 @@ export default function EditModule() {
   const moduleIdParam = params.moduleId || moduleIdFromUrl;
   const moduleId = moduleIdParam ? parseInt(moduleIdParam) : NaN;
   
-  // Debug logging
-  console.log('EditModule - URL:', location);
-  console.log('EditModule - params:', params);
-  console.log('EditModule - moduleIdParam:', moduleIdParam);
-  console.log('EditModule - parsed moduleId:', moduleId);
-  console.log('EditModule - isNaN(moduleId):', isNaN(moduleId));
+  // Debug logging (can be removed in production)
+  console.log('EditModule - moduleId:', moduleId);
 
   const [formData, setFormData] = useState<Partial<CourseModule>>({
     title: '',
