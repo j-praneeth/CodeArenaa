@@ -77,13 +77,31 @@ export const insertContestSchema = z.object({
 });
 
 export const insertCourseSchema = z.object({
-  title: z.string(),
+  title: z.string().min(1, "Course title is required"),
   description: z.string().optional(),
-  problems: z.array(z.number()).optional(),
-  modules: z.array(z.number()).optional(),
-  enrolledUsers: z.array(z.string()).optional(),
   isPublic: z.boolean().default(true),
+  category: z.string().optional(),
+  difficulty: z.enum(['beginner', 'intermediate', 'advanced']).default('beginner'),
+  estimatedHours: z.number().min(1).default(1),
+  prerequisites: z.array(z.string()).default([]),
+  learningObjectives: z.array(z.string()).default([]),
+  modules: z.array(z.object({
+    title: z.string().min(1, "Module title is required"),
+    description: z.string(),
+    order: z.number(),
+    textContent: z.string().optional(),
+    videoUrl: z.string().optional(),
+    codeExample: z.string().optional(),
+    language: z.string().optional(),
+    expectedOutput: z.string().optional(),
+  })).default([]),
+  tags: z.array(z.string()).default([]),
+  problems: z.array(z.number()).optional(),
+  enrolledUsers: z.array(z.string()).optional(),
   createdBy: z.string().optional(),
+  rating: z.number().min(0).max(5).optional(),
+  enrollmentCount: z.number().default(0),
+  completionRate: z.number().min(0).max(100).default(0),
 });
 
 export const insertCourseModuleSchema = z.object({

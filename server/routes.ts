@@ -604,17 +604,32 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.post('/api/courses', protect, requireAdmin, async (req: AuthRequest, res) => {
     try {
+      console.log('[DEBUG] Course creation request received');
+      console.log('[DEBUG] Request body:', req.body);
+      console.log('[DEBUG] User:', req.user);
+      
       const userId = req.user.id;
+      if (!userId) {
+        console.error('[DEBUG] No user ID found in request');
+        return res.status(401).json({ message: "User ID not found" });
+      }
 
+      console.log('[DEBUG] Validating course data...');
       const validatedData = insertCourseSchema.parse({
         ...req.body,
         createdBy: userId,
       });
+      console.log('[DEBUG] Validated data:', validatedData);
 
+      console.log('[DEBUG] Creating course in storage...');
       const course = await storage.createCourse(validatedData);
+      console.log('[DEBUG] Course created successfully:', course);
+      
       res.status(201).json(course);
     } catch (error) {
+      console.error('[DEBUG] Error in course creation route:', error);
       if (error instanceof z.ZodError) {
+        console.error('[DEBUG] Validation errors:', error.errors);
         return res.status(400).json({ message: "Invalid data", errors: error.errors });
       }
       console.error("Error creating course:", error);
