@@ -2,8 +2,8 @@ import { MongoClient, Db, ReadPreferenceMode, WriteConcern } from 'mongodb';
 import { EventEmitter } from 'events';
 import mongoose from 'mongoose';
 
-// Base MongoDB URL - using srv format for Atlas
-const MONGODB_URL = process.env.MONGODB_URL || "mongodb+srv://bandarin29:meritcurve@meritcurve.73u7fr7.mongodb.net/";
+// Base MongoDB URL - using srv format for Atlas with test database
+const MONGODB_URL = process.env.MONGODB_URL || "mongodb+srv://bandarin29:meritcurve@meritcurve.73u7fr7.mongodb.net/test";
 
 // MongoDB connection options
 const MONGODB_OPTIONS = {

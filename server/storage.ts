@@ -411,7 +411,16 @@ export class MemStorage implements IStorage {
   async deleteCourseModule(): Promise<void> { }
   async deleteCourseEnrollment(): Promise<void> { }
   async deleteCourse(): Promise<void> { }
-  async getCourseModule(): Promise<any> { return null; }
+  async getCourseModule(id: number): Promise<CourseModule | undefined> {
+    try {
+      const db = await connectToMongoDB();
+      const module = await db.collection('courseModules').findOne({ id: id });
+      return module as CourseModule || undefined;
+    } catch (error) {
+      console.error('Error fetching course module:', error);
+      return undefined;
+    }
+  }
   async createCourseModule(moduleData: Partial<CourseModule>): Promise<CourseModule> {
     try {
       const db = await connectToMongoDB();
@@ -431,7 +440,26 @@ export class MemStorage implements IStorage {
       throw new Error('Failed to create course module');
     }
   }
-  async updateCourseModule(): Promise<any> { return null; }
+  async updateCourseModule(id: number, moduleData: Partial<CourseModule>): Promise<CourseModule | null> {
+    try {
+      const db = await connectToMongoDB();
+      const updateData = {
+        ...moduleData,
+        updatedAt: new Date(),
+      };
+      
+      const result = await db.collection('courseModules').findOneAndUpdate(
+        { id: id },
+        { $set: updateData },
+        { returnDocument: 'after' }
+      );
+      
+      return result as CourseModule || null;
+    } catch (error) {
+      console.error('Error updating course module:', error);
+      return null;
+    }
+  }
   async enrollUserInCourse(): Promise<any> { return null; }
   async getUserCourseProgress(): Promise<any> { return null; }
   async markModuleComplete(): Promise<void> { }
