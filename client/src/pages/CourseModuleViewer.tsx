@@ -93,8 +93,16 @@ export default function CourseModuleViewer() {
 
   // Get current module with proper type safety
   const modulesList = Array.isArray(modules) ? modules : [];
+  
+  // If no moduleId provided, redirect to first module
+  if (!moduleId && modulesList.length > 0) {
+    const firstModule = modulesList[0];
+    setLocation(`/courses/${courseId}/modules/${firstModule.id}`);
+    return null;
+  }
+  
   const currentModuleIndex = modulesList.findIndex(m => m.id.toString() === moduleId);
-  const currentModule = currentModuleIndex >= 0 ? modulesList[currentModuleIndex] : undefined;
+  const currentModule = currentModuleIndex >= 0 ? modulesList[currentModuleIndex] : (modulesList.length > 0 ? modulesList[0] : undefined);
 
   // Update code when module changes
   useEffect(() => {
