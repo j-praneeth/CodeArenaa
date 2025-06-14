@@ -69,6 +69,33 @@ export function CourseDashboard() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
+  // Handle student course navigation
+  const handleCourseStart = async (courseId: number) => {
+    try {
+      const response = await fetch(`/api/courses/${courseId}/modules`);
+      if (!response.ok) throw new Error('Failed to fetch modules');
+      const modules = await response.json();
+      
+      if (modules && modules.length > 0) {
+        const firstModule = modules[0];
+        setLocation(`/courses/${courseId}/modules/${firstModule.id}`);
+      } else {
+        toast({
+          title: "No modules found",
+          description: "This course doesn't have any modules yet.",
+          variant: "destructive",
+        });
+      }
+    } catch (error) {
+      console.error('Error fetching modules:', error);
+      toast({
+        title: "Error",
+        description: "Failed to load course content.",
+        variant: "destructive",
+      });
+    }
+  };
+
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('all');
   const [selectedDifficulty, setSelectedDifficulty] = useState('all');
@@ -245,7 +272,7 @@ export function CourseDashboard() {
               </span>
               <Button 
                 size="sm" 
-                onClick={() => setLocation(`/courses/${course.id}`)}
+                onClick={() => user?.role === 'admin' ? setLocation(`/admin/courses/${course.id}`) : handleCourseStart(course.id)}
               >
                 <Play className="h-4 w-4 mr-2" />
                 {user?.role === 'admin' ? 'Manage' : 'Start Course'}
@@ -313,7 +340,7 @@ export function CourseDashboard() {
                 </Button>
               </>
             ) : (
-              <Button size="sm" onClick={() => setLocation(`/courses/${course.id}`)}>
+              <Button size="sm" onClick={() => handleCourseStart(course.id)}>
                 <Play className="h-4 w-4 mr-2" />
                 Start
               </Button>
