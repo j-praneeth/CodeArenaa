@@ -33,6 +33,11 @@ export default function EditModule() {
   const [, setLocation] = useLocation();
   const queryClient = useQueryClient();
   const moduleId = moduleIdParam ? parseInt(moduleIdParam) : NaN;
+  
+  // Debug logging
+  console.log('EditModule - moduleIdParam:', moduleIdParam);
+  console.log('EditModule - parsed moduleId:', moduleId);
+  console.log('EditModule - isNaN(moduleId):', isNaN(moduleId));
 
   const [formData, setFormData] = useState<Partial<CourseModule>>({
     title: '',
