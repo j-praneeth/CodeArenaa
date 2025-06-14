@@ -367,7 +367,7 @@ export default function CourseDetail() {
                             <Button
                               variant="ghost"
                               size="sm"
-                              onClick={() => setLocation(`/admin/courses/${courseId}/modules/${module.id}/edit`)}
+                              onClick={() => setLocation(`/admin/modules/${module.id}/edit`)}
                             >
                               <Edit className="h-4 w-4 mr-2" />
                               Edit
