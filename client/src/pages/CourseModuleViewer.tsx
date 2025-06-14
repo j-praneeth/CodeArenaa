@@ -89,8 +89,9 @@ export default function CourseModuleViewer() {
   });
 
   // Get current module
-  const currentModuleIndex = modules.findIndex(m => m.id.toString() === moduleId);
-  const currentModule = currentModuleIndex >= 0 ? modules[currentModuleIndex] : modules[0];
+  const modulesList = (modules as CourseModule[]) || [];
+  const currentModuleIndex = modulesList.findIndex(m => m.id.toString() === moduleId);
+  const currentModule = currentModuleIndex >= 0 ? modulesList[currentModuleIndex] : modulesList[0];
 
   // Update code when module changes
   useEffect(() => {
@@ -107,14 +108,14 @@ export default function CourseModuleViewer() {
 
   // Navigate to next/previous module
   const navigateToNextModule = () => {
-    if (currentModuleIndex < modules.length - 1) {
-      navigateToModule(modules[currentModuleIndex + 1]);
+    if (currentModuleIndex < modulesList.length - 1) {
+      navigateToModule(modulesList[currentModuleIndex + 1]);
     }
   };
 
   const navigateToPreviousModule = () => {
     if (currentModuleIndex > 0) {
-      navigateToModule(modules[currentModuleIndex - 1]);
+      navigateToModule(modulesList[currentModuleIndex - 1]);
     }
   };
 
@@ -202,7 +203,7 @@ export default function CourseModuleViewer() {
     });
   };
 
-  const isModuleComplete = progress?.enrollment.completedModules.includes(currentModule?.id || 0);
+  const isModuleComplete = progress?.enrollment?.completedModules?.includes(currentModule?.id || 0) || false;
 
   if (!course || !currentModule) {
     return (
@@ -270,11 +271,11 @@ export default function CourseModuleViewer() {
                 <h3 className="font-semibold text-sm">Course Modules</h3>
                 <ScrollArea className="h-24 mt-2">
                   <div className="space-y-1">
-                    {modules.map((module) => (
+                    {modulesList.map((module) => (
                       <div
                         key={module.id}
                         className={`p-2 rounded text-xs cursor-pointer transition-colors ${
-                          module.id === currentModule.id
+                          module.id === currentModule?.id
                             ? 'bg-primary text-primary-foreground'
                             : 'hover:bg-muted'
                         }`}
@@ -282,7 +283,7 @@ export default function CourseModuleViewer() {
                       >
                         <div className="flex items-center justify-between">
                           <span className="font-medium truncate">{module.title}</span>
-                          {progress?.enrollment.completedModules.includes(module.id) && (
+                          {progress?.enrollment?.completedModules?.includes(module.id) && (
                             <CheckCircle className="h-3 w-3 text-green-500 flex-shrink-0" />
                           )}
                         </div>
@@ -436,12 +437,12 @@ export default function CourseModuleViewer() {
           </Button>
           
           <span className="text-sm text-muted-foreground">
-            Module {currentModuleIndex + 1} of {modules.length}
+            Module {currentModuleIndex + 1} of {modulesList.length}
           </span>
           
           <Button
             onClick={navigateToNextModule}
-            disabled={currentModuleIndex === modules.length - 1}
+            disabled={currentModuleIndex === modulesList.length - 1}
           >
             Next Module
             <ChevronRight className="h-4 w-4 ml-2" />
