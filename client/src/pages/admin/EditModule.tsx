@@ -29,12 +29,20 @@ const api = axios.create({
 });
 
 export default function EditModule() {
-  const { moduleId: moduleIdParam } = useParams<{ moduleId: string }>();
-  const [, setLocation] = useLocation();
+  const params = useParams<{ moduleId: string }>();
+  const [location, setLocation] = useLocation();
   const queryClient = useQueryClient();
+  
+  // Extract moduleId from URL path manually as backup
+  const urlParts = location.split('/');
+  const moduleIdFromUrl = urlParts[urlParts.indexOf('modules') + 1];
+  
+  const moduleIdParam = params.moduleId || moduleIdFromUrl;
   const moduleId = moduleIdParam ? parseInt(moduleIdParam) : NaN;
   
   // Debug logging
+  console.log('EditModule - URL:', location);
+  console.log('EditModule - params:', params);
   console.log('EditModule - moduleIdParam:', moduleIdParam);
   console.log('EditModule - parsed moduleId:', moduleId);
   console.log('EditModule - isNaN(moduleId):', isNaN(moduleId));
