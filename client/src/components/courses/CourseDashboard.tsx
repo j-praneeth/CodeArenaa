@@ -86,7 +86,7 @@ export function CourseDashboard() {
 
   const deleteMutation = useMutation({
     mutationFn: async (courseId: number) => {
-      return apiRequest(`/api/courses/${courseId}`, 'DELETE');
+      return apiRequest('DELETE', `/api/courses/${courseId}`);
     },
     onSuccess: () => {
       toast({
