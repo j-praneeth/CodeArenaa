@@ -300,9 +300,14 @@ export class MemStorage implements IStorage {
   async createCourse(courseData: Partial<Course>): Promise<Course> {
     try {
       const db = await connectToMongoDB();
+      const courseId = Date.now();
+      
+      // Extract modules from course data
+      const { modules, ...courseOnlyData } = courseData as any;
+      
       const newCourse = {
-        id: Date.now(), // Simple ID generation
-        ...courseData,
+        id: courseId,
+        ...courseOnlyData,
         createdAt: new Date(),
         updatedAt: new Date(),
       };
@@ -310,6 +315,29 @@ export class MemStorage implements IStorage {
       console.log('Creating course with data:', newCourse);
       const result = await db.collection('courses').insertOne(newCourse);
       console.log('Course created successfully with ID:', result.insertedId);
+      
+      // Create separate module documents if modules exist
+      if (modules && modules.length > 0) {
+        console.log('Creating course modules:', modules);
+        const moduleDocuments = modules.map((module: any, index: number) => ({
+          id: Date.now() + index, // Ensure unique IDs
+          courseId: courseId,
+          title: module.title,
+          description: module.description,
+          order: module.order || index + 1,
+          textContent: module.textContent || '',
+          videoUrl: module.videoUrl || '',
+          codeExample: module.codeExample || '',
+          language: module.language || '',
+          expectedOutput: module.expectedOutput || '',
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        }));
+        
+        await db.collection('courseModules').insertMany(moduleDocuments);
+        console.log('Course modules created successfully');
+      }
+      
       return { ...newCourse, _id: result.insertedId } as Course;
     } catch (error) {
       console.error('Error creating course:', error);
@@ -328,9 +356,18 @@ export class MemStorage implements IStorage {
     }
   }
 
-  async getCourseModules(courseId: number): Promise<any[]> {
-    // For now, return empty array since modules functionality isn't fully implemented
-    return [];
+  async getCourseModules(courseId: number): Promise<CourseModule[]> {
+    try {
+      const db = await connectToMongoDB();
+      const modules = await db.collection('courseModules')
+        .find({ courseId: courseId })
+        .sort({ order: 1 })
+        .toArray();
+      return modules as CourseModule[];
+    } catch (error) {
+      console.error('Error fetching course modules:', error);
+      return [];
+    }
   }
 
   async getCourseEnrollments(courseId?: number, userId?: string): Promise<any[]> {
@@ -375,11 +412,31 @@ export class MemStorage implements IStorage {
   async deleteCourseEnrollment(): Promise<void> { }
   async deleteCourse(): Promise<void> { }
   async getCourseModule(): Promise<any> { return null; }
-  async createCourseModule(): Promise<any> { return null; }
+  async createCourseModule(moduleData: Partial<CourseModule>): Promise<CourseModule> {
+    try {
+      const db = await connectToMongoDB();
+      const newModule = {
+        id: Date.now(),
+        ...moduleData,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      };
+      
+      console.log('Creating course module with data:', newModule);
+      const result = await db.collection('courseModules').insertOne(newModule);
+      console.log('Course module created successfully with ID:', result.insertedId);
+      return { ...newModule, _id: result.insertedId } as CourseModule;
+    } catch (error) {
+      console.error('Error creating course module:', error);
+      throw new Error('Failed to create course module');
+    }
+  }
   async updateCourseModule(): Promise<any> { return null; }
   async enrollUserInCourse(): Promise<any> { return null; }
   async getUserCourseProgress(): Promise<any> { return null; }
   async markModuleComplete(): Promise<void> { }
+  async bookmarkModule(userId: string, moduleId: number): Promise<void> { }
+  async getCourseStats(): Promise<any> { return {}; }
   async getLeaderboard(): Promise<any[]> { return []; }
   async getAssignment(): Promise<any> { return null; }
   async createAssignment(): Promise<any> { return null; }
