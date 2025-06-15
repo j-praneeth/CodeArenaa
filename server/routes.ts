@@ -3,6 +3,7 @@ import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { connectToMongoDB } from "./db";
 import { protect, requireAdmin as requireAdminMiddleware, AuthRequest } from "./middleware/auth";
+import QRCode from 'qrcode';
 import { 
   insertProblemSchema, 
   insertSubmissionSchema, 
@@ -1212,7 +1213,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(404).json({ message: 'Course not found' });
       }
 
-      const QRCode = await import('qrcode');
       const enrollmentUrl = `${req.protocol}://${req.get('host')}/enroll/${courseId}`;
       
       // Generate QR code as data URL
