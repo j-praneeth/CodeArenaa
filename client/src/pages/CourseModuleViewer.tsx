@@ -52,7 +52,7 @@ export default function CourseModuleViewer() {
   const [, setLocation] = useLocation();
   const { toast } = useToast();
   const queryClient = useQueryClient();
-  
+
   const [code, setCode] = useState('');
   const [output, setOutput] = useState('');
   const [isExecuting, setIsExecuting] = useState(false);
@@ -91,14 +91,14 @@ export default function CourseModuleViewer() {
 
   // Get current module with proper type safety
   const modulesList = Array.isArray(modules) ? modules : [];
-  
+
   // If no moduleId provided, redirect to first module
   if (!moduleId && modulesList.length > 0) {
     const firstModule = modulesList[0];
     setLocation(`/courses/${courseId}/modules/${firstModule.id}`);
     return null;
   }
-  
+
   const currentModuleIndex = modulesList.findIndex(m => m.id.toString() === moduleId);
   const currentModule = currentModuleIndex >= 0 ? modulesList[currentModuleIndex] : (modulesList.length > 0 ? modulesList[0] : undefined);
 
@@ -311,7 +311,7 @@ export default function CourseModuleViewer() {
               {modulesList.map((module, index) => {
                 const isCompleted = progress?.enrollment?.completedModules?.includes(module.id);
                 const isCurrent = module.id === currentModule?.id;
-                
+
                 return (
                   <div
                     key={module.id}
@@ -323,14 +323,14 @@ export default function CourseModuleViewer() {
                     onClick={() => navigateToModule(module)}
                   >
                     {sidebarCollapsed ? (
-                      <div className="p-2 flex items-center justify-center">
+                      <div className="p-2 flex items-center justify-center relative">
                         <div className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold ${
                           isCurrent ? 'bg-primary-foreground text-primary' : 'bg-muted text-muted-foreground'
                         }`}>
                           {index + 1}
                         </div>
                         {isCompleted && (
-                          <CheckCircle className="h-3 w-3 text-green-500 absolute -top-1 -right-1" />
+                          <CheckCircle className="h-3 w-3 text-green-500 absolute -top-0 -right-0" />
                         )}
                       </div>
                     ) : (
@@ -536,11 +536,11 @@ export default function CourseModuleViewer() {
             <ChevronLeft className="h-4 w-4 mr-2" />
             Previous Module
           </Button>
-          
+
           <span className="text-sm text-muted-foreground">
             Module {currentModuleIndex + 1} of {modulesList.length}
           </span>
-          
+
           <Button
             onClick={navigateToNextModule}
             disabled={currentModuleIndex === modulesList.length - 1}
