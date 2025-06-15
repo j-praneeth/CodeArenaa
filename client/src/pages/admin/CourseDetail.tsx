@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useParams, useLocation } from 'wouter';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -7,7 +7,8 @@ import { Badge } from '@/components/ui/badge';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog';
-import { ChevronLeft, Edit, Trash2, Users, BookOpen, Plus, Play, Eye, Settings, Loader2 } from 'lucide-react';
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
+import { ChevronLeft, Edit, Trash2, Users, BookOpen, Plus, Play, Eye, Settings, Loader2, QrCode, Download, Copy } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import axios from 'axios';
 
@@ -52,6 +53,8 @@ export default function CourseDetail() {
   const [, setLocation] = useLocation();
   const { toast } = useToast();
   const queryClient = useQueryClient();
+  const [qrCodeData, setQrCodeData] = useState<string>('');
+  const [isQrDialogOpen, setIsQrDialogOpen] = useState(false);
   
   const courseId = courseIdParam ? parseInt(courseIdParam) : NaN;
 
@@ -157,6 +160,33 @@ export default function CourseDetail() {
     if (enrollments.length === 0) return 0;
     const totalProgress = enrollments.reduce((sum, enrollment) => sum + enrollment.progress, 0);
     return Math.round(totalProgress / enrollments.length);
+  };
+
+  // Generate QR code for course enrollment
+  const generateQrCode = async () => {
+    try {
+      const response = await fetch(`/api/courses/${courseId}/qr-code`);
+      if (!response.ok) throw new Error('Failed to generate QR code');
+      const data = await response.json();
+      setQrCodeData(data.qrCode);
+      setIsQrDialogOpen(true);
+    } catch (error) {
+      toast({
+        title: 'Error',
+        description: 'Failed to generate QR code for enrollment',
+        variant: 'destructive'
+      });
+    }
+  };
+
+  // Copy enrollment link to clipboard
+  const copyEnrollmentLink = () => {
+    const enrollmentUrl = `${window.location.origin}/enroll/${courseId}`;
+    navigator.clipboard.writeText(enrollmentUrl);
+    toast({
+      title: 'Copied!',
+      description: 'Enrollment link copied to clipboard'
+    });
   };
 
   if (!courseId || isNaN(courseId)) {
@@ -411,10 +441,16 @@ export default function CourseDetail() {
                   Manage the students enrolled in this course
                 </CardDescription>
               </div>
-              <Button onClick={() => setLocation(`/admin/courses/${courseId}/enrollments/create`)}>
-                <Plus className="h-4 w-4 mr-2" />
-                Add Student
-              </Button>
+              <div className="flex gap-2">
+                <Button variant="outline" onClick={generateQrCode}>
+                  <QrCode className="h-4 w-4 mr-2" />
+                  QR Code
+                </Button>
+                <Button onClick={() => setLocation(`/admin/courses/${courseId}/enrollments/create`)}>
+                  <Plus className="h-4 w-4 mr-2" />
+                  Add Student
+                </Button>
+              </div>
             </CardHeader>
             <CardContent>
               {enrollments.length === 0 ? (
