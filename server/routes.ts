@@ -1213,7 +1213,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(404).json({ message: 'Course not found' });
       }
 
-      const enrollmentUrl = `${req.protocol}://${req.get('host')}/enroll/${courseId}`;
+      // Use the configured frontend URL or fallback to request host
+      const frontendUrl = process.env.FRONTEND_URL || `${req.protocol}://${req.get('host')}`;
+      const enrollmentUrl = `${frontendUrl}/enroll/${courseId}`;
       
       // Generate QR code as data URL
       const qrCodeDataUrl = await QRCode.toDataURL(enrollmentUrl);
