@@ -1198,6 +1198,84 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // QR Code generation for course enrollment
+  app.get('/api/courses/:id/qr-code', protect, requireAdmin, async (req: AuthRequest, res) => {
+    try {
+      const courseId = parseInt(req.params.id);
+      if (isNaN(courseId)) {
+        return res.status(400).json({ message: 'Invalid course ID' });
+      }
+
+      // Verify course exists
+      const course = await storage.getCourse(courseId);
+      if (!course) {
+        return res.status(404).json({ message: 'Course not found' });
+      }
+
+      const QRCode = require('qrcode');
+      const enrollmentUrl = `${req.protocol}://${req.get('host')}/enroll/${courseId}`;
+      
+      // Generate QR code as data URL
+      const qrCodeDataUrl = await QRCode.toDataURL(enrollmentUrl, {
+        errorCorrectionLevel: 'M',
+        type: 'image/png',
+        quality: 0.92,
+        margin: 1,
+        color: {
+          dark: '#000000',
+          light: '#FFFFFF'
+        },
+        width: 256
+      });
+
+      res.json({
+        qrCode: qrCodeDataUrl,
+        enrollmentUrl,
+        courseId,
+        courseTitle: course.title
+      });
+    } catch (error) {
+      console.error('Error generating QR code:', error);
+      res.status(500).json({ message: 'Failed to generate QR code' });
+    }
+  });
+
+  // Course enrollment via QR code
+  app.get('/enroll/:courseId', async (req, res) => {
+    try {
+      const courseId = parseInt(req.params.courseId);
+      if (isNaN(courseId)) {
+        return res.redirect('/?error=invalid-course');
+      }
+
+      // Verify course exists
+      const course = await storage.getCourse(courseId);
+      if (!course) {
+        return res.redirect('/?error=course-not-found');
+      }
+
+      // Check if user is authenticated
+      if (!req.user) {
+        // Redirect to login with return URL
+        return res.redirect(`/login?returnTo=/enroll/${courseId}`);
+      }
+
+      // Enroll user in course
+      try {
+        await storage.enrollUserInCourse(courseId, req.user.id);
+        // Redirect to course page
+        res.redirect(`/courses/${courseId}`);
+      } catch (enrollError) {
+        console.error('Enrollment error:', enrollError);
+        // If already enrolled, still redirect to course
+        res.redirect(`/courses/${courseId}`);
+      }
+    } catch (error) {
+      console.error('Error in enrollment route:', error);
+      res.redirect('/?error=enrollment-failed');
+    }
+  });
+
   app.get('/api/courses/:id/progress', protect, async (req: AuthRequest, res) => {
     try {
       const userId = req.user.id;

@@ -38,6 +38,7 @@ import CreateModule from "@/pages/admin/CreateModule";
 import ModuleDetail from "@/pages/admin/ModuleDetail";
 import EditModule from "@/pages/admin/EditModule";
 import { CourseWizard } from "@/components/courses/CourseWizard";
+import EnrollmentPage from "@/pages/EnrollmentPage";
 
 function AppContent() {
   const { user, isLoading, isAuthenticated } = useAuth();
@@ -78,6 +79,9 @@ function AppContent() {
       </Route>
       <Route path="/register">
         <PublicRoute><RegisterPage /></PublicRoute>
+      </Route>
+      <Route path="/enroll/:courseId">
+        <EnrollmentPage />
       </Route>
       <Route path="/">
         <PublicRoute><Landing /></PublicRoute>

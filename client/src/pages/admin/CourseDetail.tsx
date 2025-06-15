@@ -522,6 +522,61 @@ export default function CourseDetail() {
           </Card>
         </TabsContent>
       </Tabs>
+
+      {/* QR Code Dialog */}
+      <Dialog open={isQrDialogOpen} onOpenChange={setIsQrDialogOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Course Enrollment QR Code</DialogTitle>
+            <DialogDescription>
+              Students can scan this QR code to join the course. They must be logged in to enroll.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex flex-col items-center space-y-4">
+            {qrCodeData ? (
+              <>
+                <div className="p-4 bg-white rounded-lg border">
+                  <img src={qrCodeData} alt="Course Enrollment QR Code" className="w-48 h-48" />
+                </div>
+                <div className="text-center">
+                  <p className="text-sm text-muted-foreground mb-2">
+                    Course: {course?.title}
+                  </p>
+                  <p className="text-xs text-muted-foreground">
+                    Enrollment URL: {window.location.origin}/enroll/{courseId}
+                  </p>
+                </div>
+              </>
+            ) : (
+              <div className="flex items-center justify-center w-48 h-48 bg-muted rounded-lg">
+                <Loader2 className="h-8 w-8 animate-spin" />
+              </div>
+            )}
+          </div>
+          <DialogFooter className="flex justify-between sm:justify-between">
+            <Button variant="outline" onClick={copyEnrollmentLink}>
+              <Copy className="h-4 w-4 mr-2" />
+              Copy Link
+            </Button>
+            <Button
+              onClick={() => {
+                if (qrCodeData) {
+                  const link = document.createElement('a');
+                  link.href = qrCodeData;
+                  link.download = `course-${courseId}-qr-code.png`;
+                  document.body.appendChild(link);
+                  link.click();
+                  document.body.removeChild(link);
+                }
+              }}
+              disabled={!qrCodeData}
+            >
+              <Download className="h-4 w-4 mr-2" />
+              Download
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
