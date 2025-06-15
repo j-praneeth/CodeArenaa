@@ -84,12 +84,14 @@ export default function AddStudentToCourse() {
   const enrollMutation = useMutation({
     mutationFn: async (userIds: string[]) => {
       const promises = userIds.map(userId =>
-        apiRequest(`/api/courses/${courseId}/enroll`, {
+        fetch(`/api/courses/${courseId}/enroll`, {
           method: 'POST',
-          body: { userId }
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ userId })
         })
       );
-      return Promise.all(promises);
+      const responses = await Promise.all(promises);
+      return Promise.all(responses.map(res => res.json()));
     },
     onSuccess: () => {
       toast({
