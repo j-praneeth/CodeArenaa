@@ -385,39 +385,117 @@ export default function CourseModuleViewer() {
         {/* Content */}
         <div className="flex-1 p-6">
           <Tabs defaultValue="content" className="h-full flex flex-col">
-            <TabsList className="grid w-full grid-cols-3">
+            <TabsList className="grid w-full grid-cols-2">
               <TabsTrigger value="content">
                 <BookOpen className="h-4 w-4 mr-2" />
-                Content
+                Content & Code
               </TabsTrigger>
               <TabsTrigger value="video">
                 <PlayCircle className="h-4 w-4 mr-2" />
                 Video
               </TabsTrigger>
-              <TabsTrigger value="code">
-                <Code className="h-4 w-4 mr-2" />
-                Code
-              </TabsTrigger>
             </TabsList>
 
             <TabsContent value="content" className="flex-1 mt-4">
-              <Card className="h-full">
-                <CardHeader>
-                  <CardTitle>{currentModule.title}</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <ScrollArea className="h-[calc(100vh-300px)]">
-                    <div className="prose max-w-none">
+              <ResizablePanelGroup direction="horizontal" className="h-full border rounded-lg">
+                {/* Content Panel */}
+                <ResizablePanel defaultSize={50} minSize={30}>
+                  <Card className="h-full border-0 rounded-none">
+                    <CardHeader className="pb-3">
+                      <CardTitle className="text-lg">{currentModule.title}</CardTitle>
                       {currentModule.description && (
-                        <p className="text-muted-foreground mb-4">{currentModule.description}</p>
+                        <p className="text-sm text-muted-foreground">{currentModule.description}</p>
                       )}
-                      {currentModule.textContent && (
-                        <div className="whitespace-pre-wrap">{currentModule.textContent}</div>
-                      )}
-                    </div>
-                  </ScrollArea>
-                </CardContent>
-              </Card>
+                    </CardHeader>
+                    <CardContent className="pt-0">
+                      <ScrollArea className="h-[calc(100vh-300px)]">
+                        <div className="prose prose-sm max-w-none">
+                          {currentModule.textContent ? (
+                            <div className="whitespace-pre-wrap leading-relaxed">
+                              {currentModule.textContent}
+                            </div>
+                          ) : (
+                            <div className="flex items-center justify-center h-32 text-muted-foreground">
+                              No content available for this module
+                            </div>
+                          )}
+                        </div>
+                      </ScrollArea>
+                    </CardContent>
+                  </Card>
+                </ResizablePanel>
+
+                <ResizableHandle withHandle />
+
+                {/* Code Panel */}
+                <ResizablePanel defaultSize={50} minSize={30}>
+                  <div className="h-full flex flex-col">
+                    <Card className="flex-1 border-0 rounded-none">
+                      <CardHeader className="pb-3">
+                        <div className="flex items-center justify-between">
+                          <CardTitle className="text-lg">Code Editor</CardTitle>
+                          <div className="flex items-center space-x-2">
+                            {currentModule.language && (
+                              <Badge variant="secondary" className="text-xs">
+                                {currentModule.language}
+                              </Badge>
+                            )}
+                            <Button 
+                              onClick={() => executeCodeMutation.mutate()} 
+                              disabled={isExecuting}
+                              size="sm"
+                            >
+                              {isExecuting ? 'Running...' : 'Run Code'}
+                            </Button>
+                          </div>
+                        </div>
+                      </CardHeader>
+                      <CardContent className="pt-0 pb-0">
+                        <div className="border rounded-lg overflow-hidden">
+                          <MonacoEditor
+                            value={code}
+                            onChange={setCode}
+                            language={currentModule.language || 'javascript'}
+                            height="250px"
+                          />
+                        </div>
+                      </CardContent>
+                    </Card>
+
+                    {/* Output Section */}
+                    {output && (
+                      <Card className="mt-4 border-0 rounded-none">
+                        <CardHeader className="pb-2">
+                          <CardTitle className="text-sm">Output</CardTitle>
+                        </CardHeader>
+                        <CardContent className="pt-0">
+                          <div className="bg-muted rounded-lg p-3 max-h-32 overflow-auto">
+                            <pre className="text-xs font-mono whitespace-pre-wrap">
+                              {output}
+                            </pre>
+                          </div>
+                        </CardContent>
+                      </Card>
+                    )}
+
+                    {/* Expected Output Section */}
+                    {currentModule.expectedOutput && (
+                      <Card className="mt-2 border-0 rounded-none">
+                        <CardHeader className="pb-2">
+                          <CardTitle className="text-sm text-green-600">Expected Output</CardTitle>
+                        </CardHeader>
+                        <CardContent className="pt-0">
+                          <div className="bg-green-50 border border-green-200 rounded-lg p-3 max-h-24 overflow-auto">
+                            <pre className="text-xs font-mono whitespace-pre-wrap text-green-800">
+                              {currentModule.expectedOutput}
+                            </pre>
+                          </div>
+                        </CardContent>
+                      </Card>
+                    )}
+                  </div>
+                </ResizablePanel>
+              </ResizablePanelGroup>
             </TabsContent>
 
             <TabsContent value="video" className="flex-1 mt-4">
@@ -442,46 +520,6 @@ export default function CourseModuleViewer() {
                   )}
                 </CardContent>
               </Card>
-            </TabsContent>
-
-            <TabsContent value="code" className="flex-1 mt-4">
-              <div className="h-full space-y-4">
-                <Card className="flex-1">
-                  <CardHeader>
-                    <div className="flex items-center justify-between">
-                      <CardTitle>Code Editor</CardTitle>
-                      <Button 
-                        onClick={() => executeCodeMutation.mutate()} 
-                        disabled={isExecuting}
-                        size="sm"
-                      >
-                        {isExecuting ? 'Running...' : 'Run Code'}
-                      </Button>
-                    </div>
-                  </CardHeader>
-                  <CardContent>
-                    <MonacoEditor
-                      value={code}
-                      onChange={setCode}
-                      language={currentModule.language || 'javascript'}
-                      height="300px"
-                    />
-                  </CardContent>
-                </Card>
-
-                {output && (
-                  <Card>
-                    <CardHeader>
-                      <CardTitle>Output</CardTitle>
-                    </CardHeader>
-                    <CardContent>
-                      <pre className="bg-muted p-4 rounded-lg text-sm overflow-auto">
-                        {output}
-                      </pre>
-                    </CardContent>
-                  </Card>
-                )}
-              </div>
             </TabsContent>
           </Tabs>
         </div>
