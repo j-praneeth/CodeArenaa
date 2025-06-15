@@ -1212,21 +1212,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(404).json({ message: 'Course not found' });
       }
 
-      const QRCode = require('qrcode');
+      const QRCode = await import('qrcode');
       const enrollmentUrl = `${req.protocol}://${req.get('host')}/enroll/${courseId}`;
       
       // Generate QR code as data URL
-      const qrCodeDataUrl = await QRCode.toDataURL(enrollmentUrl, {
-        errorCorrectionLevel: 'M',
-        type: 'image/png',
-        quality: 0.92,
-        margin: 1,
-        color: {
-          dark: '#000000',
-          light: '#FFFFFF'
-        },
-        width: 256
-      });
+      const qrCodeDataUrl = await QRCode.toDataURL(enrollmentUrl);
 
       res.json({
         qrCode: qrCodeDataUrl,
