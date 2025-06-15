@@ -9,7 +9,7 @@ import { Progress } from '@/components/ui/progress';
 import { Separator } from '@/components/ui/separator';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { PlayCircle, BookOpen, Code, CheckCircle, ChevronLeft, ChevronRight } from 'lucide-react';
+import { PlayCircle, BookOpen, Code, CheckCircle, ChevronLeft, ChevronRight, Menu, X, Clock, Award, BarChart3 } from 'lucide-react';
 import { MonacoEditor } from '@/components/MonacoEditor';
 import { useToast } from '@/hooks/use-toast';
 
@@ -56,6 +56,7 @@ export default function CourseModuleViewer() {
   const [code, setCode] = useState('');
   const [output, setOutput] = useState('');
   const [isExecuting, setIsExecuting] = useState(false);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
 
   // Fetch course data
   const { data: course, isLoading: courseLoading } = useQuery({
@@ -78,14 +79,11 @@ export default function CourseModuleViewer() {
   });
 
   // Fetch course progress
-  const { data: progress } = useQuery({
+  const { data: progress, isLoading: progressLoading } = useQuery({
     queryKey: ['course-progress', courseId],
     queryFn: async () => {
       const response = await fetch(`/api/courses/${courseId}/progress`);
-      if (!response.ok) {
-        if (response.status === 404) return null;
-        throw new Error('Failed to fetch progress');
-      }
+      if (!response.ok) throw new Error('Failed to fetch progress');
       return response.json() as Promise<CourseProgress>;
     },
     retry: false
@@ -109,92 +107,92 @@ export default function CourseModuleViewer() {
     if (currentModule?.codeExample) {
       setCode(currentModule.codeExample);
     }
-    setOutput('');
   }, [currentModule]);
 
-  // Navigate to specific module
+  // Navigation functions
   const navigateToModule = (module: CourseModule) => {
     setLocation(`/courses/${courseId}/modules/${module.id}`);
   };
 
-  // Navigate to next/previous module
-  const navigateToNextModule = () => {
-    if (currentModuleIndex < modulesList.length - 1) {
-      navigateToModule(modulesList[currentModuleIndex + 1]);
-    }
-  };
-
   const navigateToPreviousModule = () => {
     if (currentModuleIndex > 0) {
-      navigateToModule(modulesList[currentModuleIndex - 1]);
+      const prevModule = modulesList[currentModuleIndex - 1];
+      navigateToModule(prevModule);
     }
   };
 
-  // Execute code mutation
-  const executeMutation = useMutation({
-    mutationFn: async ({ code, language }: { code: string; language: string }) => {
-      setIsExecuting(true);
-      const response = await fetch('/api/modules/execute', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ code, language })
-      });
-      if (!response.ok) throw new Error('Execution failed');
-      return response.json();
-    },
-    onSuccess: (data) => {
-      setOutput(data.output || data.error || 'No output');
-      setIsExecuting(false);
-    },
-    onError: (error: Error) => {
-      toast({
-        title: 'Execution failed',
-        description: error.message,
-        variant: 'destructive'
-      });
-      setIsExecuting(false);
+  const navigateToNextModule = () => {
+    if (currentModuleIndex < modulesList.length - 1) {
+      const nextModule = modulesList[currentModuleIndex + 1];
+      navigateToModule(nextModule);
     }
-  });
+  };
 
   // Mark module complete mutation
   const markCompleteMutation = useMutation({
     mutationFn: async () => {
-      if (!currentModule) throw new Error('No module selected');
-      const response = await fetch(`/api/courses/${courseId}/modules/${currentModule.id}/complete`, {
-        method: 'POST'
+      const response = await fetch(`/api/courses/${courseId}/modules/${currentModule?.id}/complete`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ timeSpent: 0 })
       });
-      if (!response.ok) throw new Error('Failed to mark complete');
+      if (!response.ok) throw new Error('Failed to mark module complete');
       return response.json();
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['course-progress', courseId] });
-      toast({ title: 'Module marked as complete!' });
+      toast({ title: 'Module completed!' });
     },
-    onError: () => {
-      toast({ 
-        title: 'Failed to mark complete',
-        variant: 'destructive' 
+    onError: (error: Error) => {
+      console.error('Error marking module complete:', error);
+      toast({
+        title: 'Failed to mark module complete',
+        variant: 'destructive'
       });
     }
   });
 
-  // Loading states
-  if (modulesLoading || courseLoading) {
+  // Execute code mutation
+  const executeCodeMutation = useMutation({
+    mutationFn: async () => {
+      setIsExecuting(true);
+      const response = await fetch('/api/modules/execute', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          code,
+          language: currentModule?.language || 'javascript'
+        })
+      });
+      if (!response.ok) throw new Error('Failed to execute code');
+      return response.json();
+    },
+    onSuccess: (data) => {
+      setOutput(data.output || '');
+      setIsExecuting(false);
+    },
+    onError: (error: Error) => {
+      setOutput(`Error: ${error.message}`);
+      setIsExecuting(false);
+    }
+  });
+
+  if (courseLoading || modulesLoading || progressLoading) {
     return (
-      <div className="flex items-center justify-center min-h-screen">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto mb-4"></div>
-          <p>Loading course content...</p>
-        </div>
+      <div className="h-screen flex items-center justify-center">
+        <div className="animate-spin rounded-full h-32 w-32 border-b-2 border-primary"></div>
       </div>
     );
   }
 
-  if (!currentModule || modulesList.length === 0) {
+  if (!course || !currentModule) {
     return (
-      <div className="flex items-center justify-center min-h-screen">
+      <div className="h-screen flex flex-col items-center justify-center">
         <div className="text-center">
-          <p className="text-muted-foreground">No module found</p>
+          <h1 className="text-2xl font-bold mb-4">Module Not Found</h1>
+          <p className="text-muted-foreground mb-4">
+            The requested module could not be found.
+          </p>
           <Button 
             onClick={() => setLocation('/courses')}
             className="mt-4"
@@ -254,171 +252,239 @@ export default function CourseModuleViewer() {
       </div>
 
       {/* Main Content */}
-      <div className="flex-1 flex">
-        <ResizablePanelGroup direction="horizontal">
-          {/* Sidebar */}
-          <ResizablePanel defaultSize={25} minSize={20}>
-            <div className="h-full border-r">
-              <div className="border-b bg-muted/50 p-3">
-                <h3 className="font-semibold text-sm">Course Modules</h3>
-                <ScrollArea className="h-24 mt-2">
-                  <div className="space-y-1">
-                    {modulesList.map((module) => (
-                      <div
-                        key={module.id}
-                        className={`p-2 rounded text-xs cursor-pointer transition-colors ${
-                          module.id === currentModule?.id
-                            ? 'bg-primary text-primary-foreground'
-                            : 'hover:bg-muted'
-                        }`}
-                        onClick={() => navigateToModule(module)}
-                      >
-                        <div className="flex items-center justify-between">
-                          <span className="font-medium truncate">{module.title}</span>
-                          {progress?.enrollment?.completedModules?.includes(module.id) && (
-                            <CheckCircle className="h-3 w-3 text-green-500 flex-shrink-0" />
-                          )}
-                        </div>
-                      </div>
-                    ))}
+      <div className="flex-1 flex relative">
+        {/* Collapsible Sidebar */}
+        <div className={`${sidebarCollapsed ? 'w-12' : 'w-80'} transition-all duration-300 ease-in-out border-r bg-gradient-to-b from-background to-muted/20 flex flex-col`}>
+          {/* Sidebar Header */}
+          <div className="border-b p-4 flex items-center justify-between">
+            {!sidebarCollapsed && (
+              <div className="flex items-center space-x-2">
+                <div className="p-2 bg-primary/10 rounded-lg">
+                  <BookOpen className="h-5 w-5 text-primary" />
+                </div>
+                <div>
+                  <h3 className="font-bold text-sm">Course Modules</h3>
+                  <p className="text-xs text-muted-foreground">{modulesList.length} modules</p>
+                </div>
+              </div>
+            )}
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
+              className="h-8 w-8 p-0"
+            >
+              {sidebarCollapsed ? <Menu className="h-4 w-4" /> : <X className="h-4 w-4" />}
+            </Button>
+          </div>
+
+          {/* Course Progress Overview */}
+          {!sidebarCollapsed && (
+            <div className="p-4 border-b bg-gradient-to-r from-primary/5 to-primary/10">
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-medium text-muted-foreground">Progress</span>
+                  <span className="text-xs font-bold text-primary">{progress?.enrollment?.progress || 0}%</span>
+                </div>
+                <Progress value={progress?.enrollment?.progress || 0} className="h-2" />
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="flex items-center space-x-2">
+                    <Award className="h-3 w-3 text-green-500" />
+                    <span className="text-xs text-muted-foreground">
+                      {progress?.enrollment?.completedModules?.length || 0} completed
+                    </span>
                   </div>
-                </ScrollArea>
+                  <div className="flex items-center space-x-2">
+                    <BarChart3 className="h-3 w-3 text-blue-500" />
+                    <span className="text-xs text-muted-foreground">
+                      {modulesList.length - (progress?.enrollment?.completedModules?.length || 0)} remaining
+                    </span>
+                  </div>
+                </div>
               </div>
             </div>
-          </ResizablePanel>
+          )}
 
-          <ResizableHandle />
-
-          {/* Content */}
-          <ResizablePanel defaultSize={75}>
-            <div className="h-full p-6">
-              <Tabs defaultValue="content" className="h-full flex flex-col">
-                <TabsList className="grid w-full grid-cols-3">
-                  <TabsTrigger value="content">
-                    <BookOpen className="h-4 w-4 mr-2" />
-                    Content
-                  </TabsTrigger>
-                  <TabsTrigger value="video">
-                    <PlayCircle className="h-4 w-4 mr-2" />
-                    Video
-                  </TabsTrigger>
-                  <TabsTrigger value="code">
-                    <Code className="h-4 w-4 mr-2" />
-                    Code
-                  </TabsTrigger>
-                </TabsList>
-
-                <TabsContent value="content" className="flex-1 mt-4">
-                  <Card className="h-full">
-                    <CardHeader>
-                      <CardTitle>{currentModule.title}</CardTitle>
-                    </CardHeader>
-                    <CardContent>
-                      <ScrollArea className="h-[calc(100vh-300px)]">
-                        <div className="prose max-w-none">
-                          {currentModule.description && (
-                            <p className="text-muted-foreground mb-4">{currentModule.description}</p>
-                          )}
-                          {currentModule.textContent && (
-                            <div 
-                              className="space-y-4"
-                              dangerouslySetInnerHTML={{ __html: currentModule.textContent }}
-                            />
-                          )}
+          {/* Modules List */}
+          <ScrollArea className="flex-1 p-2">
+            <div className="space-y-1">
+              {modulesList.map((module, index) => {
+                const isCompleted = progress?.enrollment?.completedModules?.includes(module.id);
+                const isCurrent = module.id === currentModule?.id;
+                
+                return (
+                  <div
+                    key={module.id}
+                    className={`group relative rounded-lg cursor-pointer transition-all duration-200 ${
+                      isCurrent
+                        ? 'bg-primary text-primary-foreground shadow-md scale-105'
+                        : 'hover:bg-muted/80 hover:shadow-sm'
+                    }`}
+                    onClick={() => navigateToModule(module)}
+                  >
+                    {sidebarCollapsed ? (
+                      <div className="p-2 flex items-center justify-center">
+                        <div className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold ${
+                          isCurrent ? 'bg-primary-foreground text-primary' : 'bg-muted text-muted-foreground'
+                        }`}>
+                          {index + 1}
                         </div>
-                      </ScrollArea>
-                    </CardContent>
-                  </Card>
-                </TabsContent>
-
-                <TabsContent value="video" className="flex-1 mt-4">
-                  <Card className="h-full">
-                    <CardHeader>
-                      <CardTitle>Video Content</CardTitle>
-                    </CardHeader>
-                    <CardContent>
-                      {currentModule.videoUrl ? (
-                        <div className="aspect-video">
-                          <iframe
-                            src={currentModule.videoUrl}
-                            className="w-full h-full rounded-lg"
-                            allowFullScreen
-                          />
-                        </div>
-                      ) : (
-                        <div className="flex items-center justify-center h-64 bg-muted rounded-lg">
-                          <p className="text-muted-foreground">No video available for this module</p>
-                        </div>
-                      )}
-                    </CardContent>
-                  </Card>
-                </TabsContent>
-
-                <TabsContent value="code" className="flex-1 mt-4">
-                  <div className="grid grid-cols-2 gap-4 h-full">
-                    <Card>
-                      <CardHeader className="flex flex-row items-center justify-between">
-                        <CardTitle>Code Editor</CardTitle>
-                        <div className="flex items-center space-x-2">
-                          {currentModule.language && (
-                            <Badge variant="secondary">{currentModule.language}</Badge>
-                          )}
-                          <Button
-                            onClick={() => executeMutation.mutate({ 
-                              code, 
-                              language: currentModule.language || 'javascript' 
-                            })}
-                            disabled={isExecuting}
-                            size="sm"
-                          >
-                            {isExecuting ? 'Running...' : 'Run Code'}
-                          </Button>
-                        </div>
-                      </CardHeader>
-                      <CardContent className="p-0">
-                        <MonacoEditor
-                          height="400px"
-                          language={currentModule.language || 'javascript'}
-                          value={code}
-                          onChange={(value) => setCode(value || '')}
-                          options={{
-                            minimap: { enabled: false },
-                            fontSize: 14,
-                            lineNumbers: 'on',
-                            roundedSelection: false,
-                            scrollBeyondLastLine: false,
-                            automaticLayout: true
-                          }}
-                        />
-                      </CardContent>
-                    </Card>
-
-                    <Card>
-                      <CardHeader>
-                        <CardTitle>Output</CardTitle>
-                      </CardHeader>
-                      <CardContent>
-                        <ScrollArea className="h-[400px]">
-                          <pre className="text-sm bg-muted p-4 rounded-md whitespace-pre-wrap">
-                            {output || 'Run code to see output...'}
-                          </pre>
-                        </ScrollArea>
-                        {currentModule.expectedOutput && (
-                          <div className="mt-4">
-                            <h4 className="font-medium mb-2">Expected Output:</h4>
-                            <pre className="text-sm bg-green-50 border border-green-200 p-3 rounded-md whitespace-pre-wrap">
-                              {currentModule.expectedOutput}
-                            </pre>
-                          </div>
+                        {isCompleted && (
+                          <CheckCircle className="h-3 w-3 text-green-500 absolute -top-1 -right-1" />
                         )}
-                      </CardContent>
-                    </Card>
+                      </div>
+                    ) : (
+                      <div className="p-3">
+                        <div className="flex items-start space-x-3">
+                          <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold flex-shrink-0 ${
+                            isCurrent 
+                              ? 'bg-primary-foreground text-primary' 
+                              : isCompleted 
+                                ? 'bg-green-100 text-green-700' 
+                                : 'bg-muted text-muted-foreground'
+                          }`}>
+                            {isCompleted ? <CheckCircle className="h-4 w-4" /> : index + 1}
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <h4 className={`font-medium text-sm leading-tight mb-1 ${
+                              isCurrent ? 'text-primary-foreground' : 'text-foreground'
+                            }`}>
+                              {module.title}
+                            </h4>
+                            {module.description && (
+                              <p className={`text-xs leading-relaxed line-clamp-2 ${
+                                isCurrent ? 'text-primary-foreground/80' : 'text-muted-foreground'
+                              }`}>
+                                {module.description}
+                              </p>
+                            )}
+                            <div className="flex items-center mt-2 space-x-2">
+                              <Clock className={`h-3 w-3 ${
+                                isCurrent ? 'text-primary-foreground/60' : 'text-muted-foreground'
+                              }`} />
+                              <span className={`text-xs ${
+                                isCurrent ? 'text-primary-foreground/80' : 'text-muted-foreground'
+                              }`}>
+                                Module {module.order}
+                              </span>
+                            </div>
+                          </div>
+                        </div>
+                        {isCurrent && (
+                          <div className="absolute inset-0 rounded-lg border-2 border-primary/30 pointer-events-none" />
+                        )}
+                      </div>
+                    )}
                   </div>
-                </TabsContent>
-              </Tabs>
+                );
+              })}
             </div>
-          </ResizablePanel>
-        </ResizablePanelGroup>
+          </ScrollArea>
+        </div>
+
+        {/* Content */}
+        <div className="flex-1 p-6">
+          <Tabs defaultValue="content" className="h-full flex flex-col">
+            <TabsList className="grid w-full grid-cols-3">
+              <TabsTrigger value="content">
+                <BookOpen className="h-4 w-4 mr-2" />
+                Content
+              </TabsTrigger>
+              <TabsTrigger value="video">
+                <PlayCircle className="h-4 w-4 mr-2" />
+                Video
+              </TabsTrigger>
+              <TabsTrigger value="code">
+                <Code className="h-4 w-4 mr-2" />
+                Code
+              </TabsTrigger>
+            </TabsList>
+
+            <TabsContent value="content" className="flex-1 mt-4">
+              <Card className="h-full">
+                <CardHeader>
+                  <CardTitle>{currentModule.title}</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <ScrollArea className="h-[calc(100vh-300px)]">
+                    <div className="prose max-w-none">
+                      {currentModule.description && (
+                        <p className="text-muted-foreground mb-4">{currentModule.description}</p>
+                      )}
+                      {currentModule.textContent && (
+                        <div className="whitespace-pre-wrap">{currentModule.textContent}</div>
+                      )}
+                    </div>
+                  </ScrollArea>
+                </CardContent>
+              </Card>
+            </TabsContent>
+
+            <TabsContent value="video" className="flex-1 mt-4">
+              <Card className="h-full">
+                <CardHeader>
+                  <CardTitle>Video Content</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  {currentModule.videoUrl ? (
+                    <div className="aspect-video">
+                      <iframe
+                        src={currentModule.videoUrl.replace('watch?v=', 'embed/')}
+                        className="w-full h-full rounded-lg"
+                        allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                        allowFullScreen
+                      />
+                    </div>
+                  ) : (
+                    <div className="flex items-center justify-center h-64 bg-muted rounded-lg">
+                      <p className="text-muted-foreground">No video content available</p>
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            </TabsContent>
+
+            <TabsContent value="code" className="flex-1 mt-4">
+              <div className="h-full space-y-4">
+                <Card className="flex-1">
+                  <CardHeader>
+                    <div className="flex items-center justify-between">
+                      <CardTitle>Code Editor</CardTitle>
+                      <Button 
+                        onClick={() => executeCodeMutation.mutate()} 
+                        disabled={isExecuting}
+                        size="sm"
+                      >
+                        {isExecuting ? 'Running...' : 'Run Code'}
+                      </Button>
+                    </div>
+                  </CardHeader>
+                  <CardContent>
+                    <MonacoEditor
+                      value={code}
+                      onChange={setCode}
+                      language={currentModule.language || 'javascript'}
+                      height="300px"
+                    />
+                  </CardContent>
+                </Card>
+
+                {output && (
+                  <Card>
+                    <CardHeader>
+                      <CardTitle>Output</CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      <pre className="bg-muted p-4 rounded-lg text-sm overflow-auto">
+                        {output}
+                      </pre>
+                    </CardContent>
+                  </Card>
+                )}
+              </div>
+            </TabsContent>
+          </Tabs>
+        </div>
       </div>
 
       {/* Footer Navigation */}
