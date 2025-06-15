@@ -507,10 +507,26 @@ export default function CourseModuleViewer() {
                   {currentModule.videoUrl ? (
                     <div className="aspect-video">
                       <iframe
-                        src={currentModule.videoUrl.replace('watch?v=', 'embed/')}
-                        className="w-full h-full rounded-lg"
+                        src={(() => {
+                          const patterns = [
+                            /(?:youtube\.com\/watch\?v=)([^&\n?#]+)/,
+                            /(?:youtu\.be\/)([^&\n?#]+)/,
+                            /(?:youtube\.com\/embed\/)([^&\n?#]+)/,
+                            /(?:youtube\.com\/v\/)([^&\n?#]+)/
+                          ];
+                          
+                          for (const pattern of patterns) {
+                            const match = currentModule.videoUrl.match(pattern);
+                            if (match && match[1]) {
+                              return `https://www.youtube.com/embed/${match[1]}?enablejsapi=1&origin=${window.location.origin}`;
+                            }
+                          }
+                          return currentModule.videoUrl;
+                        })()}
+                        className="w-full h-full rounded-lg border-0"
                         allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
                         allowFullScreen
+                        title={currentModule.title}
                       />
                     </div>
                   ) : (

@@ -277,9 +277,25 @@ export default function ModuleDetail() {
               <CardContent>
                 <div className="aspect-video">
                   <iframe
-                    src={module.videoUrl.replace('watch?v=', 'embed/')}
+                    src={(() => {
+                      const patterns = [
+                        /(?:youtube\.com\/watch\?v=)([^&\n?#]+)/,
+                        /(?:youtu\.be\/)([^&\n?#]+)/,
+                        /(?:youtube\.com\/embed\/)([^&\n?#]+)/,
+                        /(?:youtube\.com\/v\/)([^&\n?#]+)/
+                      ];
+                      
+                      for (const pattern of patterns) {
+                        const match = module.videoUrl!.match(pattern);
+                        if (match && match[1]) {
+                          return `https://www.youtube.com/embed/${match[1]}?enablejsapi=1&origin=${window.location.origin}`;
+                        }
+                      }
+                      return module.videoUrl;
+                    })()}
                     title={module.title}
-                    className="w-full h-full rounded-lg"
+                    className="w-full h-full rounded-lg border-0"
+                    allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
                     allowFullScreen
                   />
                 </div>

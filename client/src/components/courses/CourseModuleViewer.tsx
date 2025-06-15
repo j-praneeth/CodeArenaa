@@ -166,9 +166,20 @@ export function CourseModuleViewer({ courseId, moduleId }: CourseViewerProps) {
   };
 
   const getYouTubeVideoId = (url: string) => {
-    const regex = /(?:youtube\.com\/watch\?v=|youtu\.be\/)([^&\n?#]+)/;
-    const match = url.match(regex);
-    return match ? match[1] : null;
+    const patterns = [
+      /(?:youtube\.com\/watch\?v=)([^&\n?#]+)/,
+      /(?:youtu\.be\/)([^&\n?#]+)/,
+      /(?:youtube\.com\/embed\/)([^&\n?#]+)/,
+      /(?:youtube\.com\/v\/)([^&\n?#]+)/
+    ];
+    
+    for (const pattern of patterns) {
+      const match = url.match(pattern);
+      if (match && match[1]) {
+        return match[1];
+      }
+    }
+    return null;
   };
 
   const formatTime = (seconds: number) => {
@@ -372,10 +383,11 @@ export function CourseModuleViewer({ courseId, moduleId }: CourseViewerProps) {
                       <div className="aspect-video bg-black rounded-lg overflow-hidden">
                         {getYouTubeVideoId(currentModule.videoUrl) ? (
                           <iframe
-                            src={`https://www.youtube.com/embed/${getYouTubeVideoId(currentModule.videoUrl)}`}
+                            src={`https://www.youtube.com/embed/${getYouTubeVideoId(currentModule.videoUrl)}?enablejsapi=1&origin=${window.location.origin}`}
                             title={currentModule.title}
-                            className="w-full h-full"
+                            className="w-full h-full border-0"
                             allowFullScreen
+                            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
                             onLoad={() => setIsVideoPlaying(true)}
                           />
                         ) : (
